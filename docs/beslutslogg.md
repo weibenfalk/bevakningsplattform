@@ -195,10 +195,29 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 **Alternativ:** (a) Behålla 50 för alla. Då hamnar nästan allt vid tröskeln och utskicket blir platt. (b) Slumpad påverkan. Då går varken demon eller testerna att upprepa.
 **Vad demon visar nu (stubben, dag 1):** Kalle får 11 artiklar, Anna 5 och Mikael 17. Börsnoteringen (r11) når bara koncernledningen. r20 (efter reparerad teckenkodning) når Anna, r10, r14, r15 och r21 flaggas och når ingen.
 **Det demon fortfarande avslöjar (kända problem, inte rättade här):**
-- **r08** ("Mina bästa städtips", brus) når Anna och Mikael med poängen 65. Stubben ger den fönsterputs på ordet "fönster", och entitetsmatcharen träffar dessutom det egna varumärket Rena Fönster på "rena fönster" (falsk träff på vanliga ord, hör till fel 10:s omskrivning av matcharen). Entiteten väger 100.
+- **r08** ("Mina bästa städtips", brus) når Anna och Mikael med poängen 65. Stubben ger den fönsterputs på ordet "fönster", och entitetsmatcharen träffar dessutom det egna varumärket Rena Fönster på "rena fönster" (falsk träff på vanliga ord). Entiteten väger 100. Det är rättat i fel 10 (se nästa poster).
 - **r19** (promptinjektion och ett obekräftat rykte om konkurs) får poängen 79 och hamnar högt för Kalle, eftersom ordet "konkurs" ger hög påverkan. Det är precis risken som "verifiering av akutlarm mot en andra källa" (medvetet bortvalt) ska hantera.
-- **r06** får bara fonsterputs, fast vår bedömning är takvård och fonsterputs. Det är stubbens nyckelord.
+- **r06** fick först bara fonsterputs. Det är rättat i nästa post (rotavdrag ger takvård i stubben).
 **Bevis:** Sju tester i `test/enrich.spec.ts` ("Stubben: påverkan efter nyckelord").
+
+## 2026-10-09: r06 (rotavdraget) når både takvård och fönsterputs
+
+**Beslut:** `rotavdrag` är nu ett tak-nyckelord i stubben. Rotavdraget gäller takvård, och r06 nämner dessutom fönsterputs (rutavdraget), så artikeln får båda arbetsytorna och når både Kalle och Anna. Specens mål är inga missade regeländringar, och r06 hade tidigare bara fonsterputs.
+**Gäller bara stubben.** En riktig modell avgör arbetsytan själv. Att nyckelordet är ett prefix gör att "Rotavdraget" träffar. Rutavdrag har inget eget nyckelord, och det behövs inte här eftersom texten innehåller "fönsterputs".
+**Bevis:** Tre tester i `test/enrich.spec.ts` ("Stubben: rotavdrag gäller takvård (r06)"): arbetsytorna, åtkomst för alla tre användare och att artikeln kommer med i både Kalles och Annas utskick. De var röda och är gröna.
+
+## 2026-10-09: Fel 10 – genitiv, Unicode-gränser och skiftlägeskänsliga alias
+
+**Problem:** `matchEntities` använde `\b` och flaggan `i`. `\b` räknar å, ä och ö som icke-bokstäver, så gränserna blev fel. "Takvårdarnas" missades. Alias som också är vanliga ord gav falska träffar: "Rena fönster" i ett städtips (r08) träffade det egna varumärket Rena Fönster, som väger 100, och r08 hamnade högt i utskicket.
+**Beslut:**
+- **Unicode-medvetna ordgränser** (`(?<![\p{L}\p{N}])` och `(?![\p{L}\p{N}])` med flaggan `u`) i stället för `\b`. Å, ä och ö räknas som bokstäver.
+- **Genitiv-s** är tillåtet efter alias: "Takvårdarnas" matchar Takvårdarna. Andra ändelser och sammansättningar ("Takvårdarnasson", "SuperTakvårdarna") matchar inte.
+- **Alias matchas skiftlägeskänsligt.** "Rena fönster" träffar inte "Rena Fönster", och "klart glas" träffar inte "Klart Glas". **Domäner matchas oberoende av skiftläge**, eftersom de är gemener i praktiken ("Takvardarna.SE" ska träffa).
+- Flera blanksteg eller en radbrytning inuti ett flerordsalias spelar ingen roll, och specialtecken i ett alias tolkas som text.
+**Avvägningen:** Skiftlägeskänslighet kan missa ett varumärke som skrivs med gemener ("rikstak") eller bara med versaler ("RIKSTAK I KONKURS"). Vi valde att missa ibland hellre än att få falska träffar som höjer poängen och för in brus i utskicken, eftersom en falsk entitetsträff på ett eget eller bevakat varumärke väger tungt (vikt 100 för kritiska). Det finns också ett missat-fall för en bevakad konkurrent. Avvägningen bör omprövas när riktig data finns, och det finns två vägar framåt: en uttrycklig flagga per alias ("känsligt för skiftläge") i entitetsregistret, eller en andra signal (till exempel domänen eller organisationsnumret) som tillåter gemener.
+**Alternativ:** (a) Skiftlägeskänsligt bara för alias som är vanliga ord. Det kräver en lista över vanliga ord eller en flagga per alias, och datamodellen har ingen. (b) Behålla skiftlägesokänsligt och acceptera brus. Det är problemet vi hade. (c) Ett beroende för språkhantering (stammar). Mer yta än problemet motiverar.
+**Kvarstår:** Bara genitiv-s hanteras. Andra böjningar (till exempel plural eller bestämd form av ett vanligt ord) matchar inte. Ett varumärke som består av ett vanligt ord med stor bokstav först i en mening ("Klart glas är..." mot "Klart Glas") missas också.
+**Bevis:** Sju av åtta nya tester i `test/entity-matcher.spec.ts` ("ordgränser och böjning") var röda och blev gröna. Det åttonde ("domäner oberoende av skiftläge") skyddar det som redan fungerade.
 
 ## AI-logg
 

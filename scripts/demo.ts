@@ -106,7 +106,8 @@ async function main() {
 
   console.log(
     '\nObs: stubben (AI-ersättaren) sätter arbetsyta och påverkan efter nyckelord, så poängen visar flödet och är\n' +
-      'ingen bedömning. Entitetsträffar missar fortfarande böjningar (fel 10).\n',
+      'ingen bedömning. Entitetsträffar matchar alias skiftlägeskänsligt\n' +
+      'och bara med genitiv-s som böjning (fel 10).\n',
   );
 
   await app.close();

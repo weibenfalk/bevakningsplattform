@@ -52,7 +52,8 @@ export function stubImpact(text: string): number {
 
 export function stubBusinessAreas(text: string): Space[] {
   const areas: Space[] = [];
-  if (hasPrefix(text, 'tak')) areas.push('takvard');
+  // Rotavdraget gäller takvård (r06). Specens mål är inga missade regeländringar.
+  if (hasPrefix(text, 'tak', 'rotavdrag')) areas.push('takvard');
   if (hasPrefix(text, 'fönster', 'puts')) areas.push('fonsterputs');
   if (hasPrefix(text, 'sydkust', 'börsnotering')) areas.push('koncern');
   return areas;

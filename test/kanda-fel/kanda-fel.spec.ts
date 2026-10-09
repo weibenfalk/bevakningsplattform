@@ -10,7 +10,6 @@ import { renderDigest } from '../../src/digest/render';
 import { LlmProvider } from '../../src/llm/llm.provider';
 import { StubProvider } from '../../src/llm/stub.provider';
 import { EnrichService } from '../../src/pipeline/enrich.service';
-import { matchEntities } from '../../src/pipeline/entity-matcher';
 import { isSameStory } from '../../src/pipeline/similarity';
 import { closeTestingApp, createTestingApp, seedArticles, testKnex } from '../helpers';
 
@@ -34,12 +33,6 @@ describe('Behörighet (incidenten: Anna fick en konkursnyhet om takvård)', () =
 });
 
 describe('Pipeline', () => {
-  it('fel 10: alias med svensk böjning matchar (Takvårdarnas)', () => {
-    const tv = { id: 'e2', name: 'Takvårdarna', watchLevel: 'high' as const,
-      aliases: ['Takvårdarna'], domains: ['takvardarna.se'] };
-    expect(matchEntities('Takvårdarnas kunder blir utan pengar', [tv])).not.toEqual([]);
-  });
-
   it('fel 11: två orelaterade texter räknas inte som samma story', async () => {
     const stub = new StubProvider();
     const a = await stub.embed('Rotavdraget sänks från 30 till 20 procent av arbetskostnaden för arbeten');

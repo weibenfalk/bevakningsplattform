@@ -209,3 +209,37 @@ describe('Stubben: påverkan efter nyckelord (gäller bara stubben)', () => {
   });
 });
 
+describe('Stubben: rotavdrag gäller takvård (r06)', () => {
+  const r06 = {
+    id: 'r06', source: 'skatteverket', url: 'https://skatteverket.example.se/rot', published_at: '2026-09-30T09:00:00+02:00',
+    title: 'Ändrat rotavdrag från 1 januari 2027',
+    text: 'Rotavdraget sänks från 30 till 20 procent av arbetskostnaden för arbeten som utförs från och med den 1 januari 2027. Rutavdraget, som omfattar fönsterputs, påverkas inte.',
+  };
+
+  it('rotavdrag ger takvard', () => {
+    expect(stubBusinessAreas('Rotavdraget sänks')).toContain('takvard');
+    expect(stubBusinessAreas(`${r06.title}\n${r06.text}`).sort()).toEqual(['fonsterputs', 'takvard']);
+  });
+
+  describe('genom pipelinen', () => {
+    let app: INestApplicationContext;
+    beforeEach(async () => { app = await createTestingApp(); });
+    afterEach(closeTestingApp);
+
+    it('r06 når både Kalle (takvård) och Anna (fönsterputs), och Mikael', async () => {
+      await app.get(EnrichService).run([r06], new Date('2026-10-01T07:00:00+02:00'));
+      for (const user of ['u-kalle', 'u-anna', 'u-mikael']) {
+        const rows = await app.get(ArticleAccessService).forUser(user);
+        expect(rows.map((r) => r.raw_id)).toContain('r06');
+      }
+    });
+
+    it('och kommer med i båda utskicken (en regeländring får inte missas)', async () => {
+      await app.get(EnrichService).run([r06], new Date('2026-10-01T07:00:00+02:00'));
+      for (const user of ['u-kalle', 'u-anna']) {
+        expect(await app.get(DigestService).compose(user)).toContain('Ändrat rotavdrag');
+      }
+    });
+  });
+});
+
