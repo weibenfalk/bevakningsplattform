@@ -20,6 +20,7 @@ export class StubProvider implements LlmProvider {
     return JSON.stringify({
       summary: 'Sammanfattning från stubben.',
       business_areas: [],
+      categories: ['ovrigt'],
       urgency: 'info',
       impact: 50,
       confidence: 0.8,

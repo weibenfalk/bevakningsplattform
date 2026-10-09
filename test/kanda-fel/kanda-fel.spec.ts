@@ -33,12 +33,6 @@ describe('Behörighet (incidenten: Anna fick en konkursnyhet om takvård)', () =
   });
   afterEach(closeTestingApp);
 
-  it('fel 3: åtkomstmodulen lämnar aldrig ut fulltexten', async () => {
-    await seedArticles([{ raw_id: 'r16', spaces: ['fonsterputs'], urgency: 'info', full_text: 'Hela texten' }]);
-    const [row] = await access.forUser('u-anna');
-    expect(row).not.toHaveProperty('full_text');
-  });
-
   it('fel 4: en artikel som AI:n inte kunde knyta till ett affärsområde hamnar inte hos alla', async () => {
     await app.get(EnrichService).run([konkurs]); // stubben svarar business_areas: []
     const rows = await access.forUser('u-anna');

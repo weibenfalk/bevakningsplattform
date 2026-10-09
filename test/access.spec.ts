@@ -46,4 +46,54 @@ describe('ArticleAccessService: omfånget är en hård gräns', () => {
     const rows = await access.forUser('u-anna');
     expect(rows.map((r) => r.raw_id)).not.toContain('x1');
   });
+
+  it('åtkomstmodulen lämnar aldrig ut fulltexten', async () => {
+    await seedArticles([{ raw_id: 'r16', spaces: ['fonsterputs'], urgency: 'info', full_text: 'Hela texten' }]);
+    const [row] = await access.forUser('u-anna');
+    expect(row).not.toHaveProperty('full_text');
+    expect(row).not.toHaveProperty('search_vector');
+  });
+
+  it('sort tar bara emot vitlistade kolumner (SQL-injektion via sort)', async () => {
+    await seedArticles([
+      { raw_id: 'a', spaces: ['fonsterputs'], urgency: 'info', relevance: 1 },
+      { raw_id: 'b', spaces: ['fonsterputs'], urgency: 'info', relevance: 2 },
+    ]);
+    await expect(access.forUser('u-anna', { sort: '(select pg_sleep(0))' })).rejects.toThrow();
+    await expect(access.forUser('u-anna', { sort: 'full_text' })).rejects.toThrow();
+    await expect(access.forUser('u-anna', { sort: 'relevance; drop table articles' })).rejects.toThrow();
+    const rows = await access.forUser('u-anna', { sort: 'relevance asc' });
+    expect(rows.map((r) => r.raw_id)).toEqual(['a', 'b']);
+  });
+
+  it('sorterar fallande på relevans som standard', async () => {
+    await seedArticles([
+      { raw_id: 'a', spaces: ['fonsterputs'], urgency: 'info', relevance: 1 },
+      { raw_id: 'b', spaces: ['fonsterputs'], urgency: 'info', relevance: 2 },
+    ]);
+    const rows = await access.forUser('u-anna');
+    expect(rows.map((r) => r.raw_id)).toEqual(['b', 'a']);
+  });
+
+  it('en nekad kategori döljs även för artiklar inom användarens arbetsyta', async () => {
+    await testKnex()('content_scopes').where({ user_id: 'u-anna' }).update({ deny_categories: ['konkurrent'] });
+    await seedArticles([
+      { raw_id: 'k1', spaces: ['fonsterputs'], urgency: 'info', categories: ['konkurrent'] },
+      { raw_id: 'k2', spaces: ['fonsterputs'], urgency: 'info', categories: ['konkurrent', 'regler'] },
+      { raw_id: 'k3', spaces: ['fonsterputs'], urgency: 'info', categories: ['regler'] },
+      { raw_id: 'k4', spaces: ['fonsterputs'], urgency: 'info' },
+    ]);
+    const rows = await access.forUser('u-anna');
+    expect(rows.map((r) => r.raw_id).sort()).toEqual(['k3', 'k4']);
+  });
+
+  it('en nekad kategori döljs även akuta artiklar och sökträffar', async () => {
+    await testKnex()('content_scopes').where({ user_id: 'u-anna' }).update({ deny_categories: ['konkurrent'] });
+    await seedArticles([
+      { raw_id: 'k1', spaces: ['fonsterputs'], urgency: 'akut', categories: ['konkurrent'], title: 'Fönster konkurs' },
+      { raw_id: 'k3', spaces: ['fonsterputs'], urgency: 'akut', categories: ['regler'], title: 'Fönster pris' },
+    ]);
+    const rows = await access.forUser('u-anna', { q: 'fönster' });
+    expect(rows.map((r) => r.raw_id)).toEqual(['k3']);
+  });
 });

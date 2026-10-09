@@ -43,6 +43,7 @@ export async function up(knex: Knex): Promise<void> {
       relevance     integer,
       cluster_id    text,
       entity_ids    text[] NOT NULL DEFAULT '{}',
+      categories    text[] NOT NULL DEFAULT '{}',
       published_at  timestamptz,
       search_vector tsvector GENERATED ALWAYS AS (
         to_tsvector('swedish', coalesce(title, '') || ' ' || coalesce(summary, ''))
