@@ -88,6 +88,30 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 - Kvarstår: `title` kommer från råposten och är inte validerad. `otherSources` läser fortfarande `articles` direkt (kodgranskningen, `digest.service.ts`). Titeln i mejlet escapas, men `summary` renderas fortfarande via `marked` (fel 6). `scripts/demo.ts` läser `full_text` direkt ur databasen för att visa läckan, och det är en diagnostikdel och ingen användarväg.
 **Bevis:** Fel 5 gick från rött till grönt och ligger nu i `test/enrich.spec.ts`. `test/raw-text.spec.ts` är ny.
 
+## 2026-10-09: Fel 6 och 7 – mejlet renderar bara escapad text och http(s)-länkar
+
+**Beslut:** `marked` är borttaget (ur `package.json` och lockfilen). Sammanfattningen renderas som ren, escapad text, så Markdown tolkas aldrig. Huvudlänken och länkarna i `otherSources` går genom `safeHref`, som tolkar adressen med `new URL()` och bara släpper igenom `http:` och `https:`. Övriga adresser (`javascript:`, `data:`, relativa och ogiltiga) renderas inte som länk. Rubriken visas då som text, och en ogiltig länk i `otherSources` utelämnas. Värdet i `href` escapas dessutom.
+**Alternativ:** (a) Behålla `marked` med sanering (till exempel DOMPurify). Det är mer kod och en beroendeyta i ett säkerhetskritiskt steg, och sammanfattningen behöver inte Markdown. (b) Svartlista farliga protokoll. Det missar nya, så vitlista är rätt väg. (c) `encodeURI` som tidigare. Den escapar inte rätt tecken för attribut.
+**Bevis:** Fel 6 och 7 gick från rött till grönt och ligger i `test/render.spec.ts`, tillsammans med tester för versaler (`JaVaScRiPt:`), inledande mellanslag, `data:`, `//`-adresser och citattecken i adressen.
+
+## 2026-10-09: `otherSources` går via åtkomstmodulen
+
+**Problem:** `DigestService.otherSources` läste `articles` direkt förbi åtkomstmodulen. Man kunde se namn och länkar för källor från artiklar utanför sitt omfång, inklusive artiklar flaggade för granskning och nekade kategorier. Arkitekturtestet missade det, eftersom det bara söker efter `from articles`. Mejlet byggdes dessutom med `...a`, som spred hela raden.
+**Beslut:** Ny metod `ArticleAccessService.sourcesByCluster(userId, clusterIds)` använder samma privata `scoped()` som `forUser`. Det finns alltså en enda uppsättning omfångsregler. Den hämtar källor för alla kluster i en fråga i stället för en fråga per artikel (N+1). `DigestService` har inte längre någon databasanslutning, och mejlets rader byggs fält för fält. Radtypen `ArticleRow` beskriver vad åtkomstmodulen lämnar ut.
+**Alternativ:** Låta `DigestService` filtrera själv. Då dupliceras reglerna och nästa ändring glöms på ett ställe.
+**Bevis:** Tre tester i `test/digest.spec.ts` var röda (hemlig, flaggad och nekad källa läckte) och blev gröna. Två gällande tester skyddar att egna källor syns och att artikeln inte räknas som sin egen andra källa.
+**Kvarstår:** Arkitekturtestet fångar fortfarande inte `knex('articles')`. Det är nästa steg i planen. Tröskeln `>` (i stället för `>=`) och `slice` före `sort` i `DigestService` är ändrade i inget av stegen.
+
+## 2026-10-09: Exporten – `?userId=` bara för admin, och skydd mot CSV-formler
+
+**Beslut:**
+- `?userId=` får bara användas av en admin. En vanlig användare som anger någon annans id får 403. Att ange sitt eget id går bra.
+- Rollen sätts i `AuthGuard` och kommer från serverns konfiguration (`ADMIN_USER_IDS`, kommaseparerad lista), aldrig från anropet. Ingen header kan göra någon till admin. Utan konfiguration är ingen admin.
+- Textceller i CSV som börjar med `=`, `+`, `-`, `@`, tabb eller radbrytning får ett inledande `'`. Tal lämnas orörda.
+**Alternativ:** (a) En header som `x-user-role: admin`. Den kan vem som helst skicka. (b) Ta bort `?userId=` helt. Specen kräver att en admin kan visa systemet som en annan användare, så funktionen ska finnas men skyddas. (c) Prefixa alla celler. Det förstör siffror.
+**Känd begränsning: riktig autentisering saknas.** `AuthGuard` är en platshållare från den ärvda koden. Den litar på headern `x-user-id`, så vem som helst kan utge sig för att vara en admin genom att skicka en admins id. Rollkontrollen är därför bara ett skydd mot misstag och mot enkla angrepp, och den skyddar inte mot en angripare. I produktion krävs riktig inloggning (till exempel OIDC med signerade tokens) och roller i identitetsleverantören. Det är första punkten under nästa steg i `ÖVERLÄMNING.md`. `sort` är redan en vitlista (fel 3).
+**Bevis:** Nio tester i `test/export.spec.ts` var röda och blev gröna: rollkontroll i guarden (en roll i headern räknas inte), 403 för andras innehåll, admin får exportera, och sex fall av formelinjektion.
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.

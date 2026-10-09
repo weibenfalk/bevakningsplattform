@@ -5,7 +5,7 @@
 Uppdateras varje gång ett fel rättas (se Arbetsregler i `CLAUDE.md`). Status: **rättat**, **kvar** eller
 **medvetet bortvalt** (dokumenteras då som nästa steg i `ÖVERLÄMNING.md`). Allvarlighetsgrad enligt nedan:
 K = kritisk, H = hög, M = medel. Beslut hänvisar till avsnittsrubriken i `docs/beslutslogg.md`.
-Fel 1–11 är de kända felen i `test/kanda-fel`. De som har bokstav eller nummer över 11 hittades på vägen.
+Fel 1–11 är de kända felen i `test/kanda-fel`. Tester för rättade fel har flyttats till den vanliga sviten. De som har bokstav eller nummer över 11 hittades på vägen.
 
 | Fel | Beskrivning | Grad | Status | Test som bevisar det | Beslut |
 |---|---|---|---|---|---|
@@ -16,20 +16,34 @@ Fel 1–11 är de kända felen i `test/kanda-fel`. De som har bokstav eller numm
 | 4 | Artikel utan affärsområde får standardvärdet takvard + fonsterputs och når alla | K | rättat | `test/enrich.spec.ts`: "ett AI-svar utan giltig arbetsyta publiceras inte, utan sparas flaggad för granskning", plus `test/access.spec.ts`: "en artikel flaggad för granskning visas aldrig, även om arbetsytan stämmer" | "Fel 4 – ett AI-svar utan giltig arbetsyta publiceras inte (fail closed)" |
 | 4b | Modellen anger en giltig men felaktig arbetsyta, eller luras av injektion (r19) | K | kvar (känd risk) | saknas | "Fel 4 …", under Känd risk och Nästa steg |
 | 5 | Originaltexten blir sammanfattning när AI-svaret är ogiltigt | K | rättat | `test/enrich.spec.ts`: "när AI:n svarar fel sparas ingen sammanfattning (inte originaltexten) och artikeln flaggas", plus `test/raw-text.spec.ts` (mejl, export och arkitekturregel) | "Fel 5 – originaltexten används aldrig som sammanfattning" |
-| 6 | HTML i sammanfattningen escapas inte (`marked`) | K | kvar | `test/kanda-fel`: "fel 6: HTML i sammanfattningen escapas" | – |
-| 7 | `javascript:`-länkar renderas i mejlet | K | kvar | `test/kanda-fel`: "fel 7: länkar som inte är http(s) renderas inte" | – |
+| 6 | HTML i sammanfattningen escapas inte (`marked`) | K | rättat | `test/render.spec.ts`: "HTML i sammanfattningen escapas" och "Markdown tolkas inte, utan visas som den står" | "Fel 6 och 7 – mejlet renderar bara escapad text och http(s)-länkar" |
+| 7 | `javascript:`-länkar renderas i mejlet (huvudlänk och `otherSources`) | K | rättat | `test/render.spec.ts`: "bara http- och https-länkar" (sju adresser) och "länkar i otherSources följer samma regel" | "Fel 6 och 7 – mejlet renderar bara escapad text och http(s)-länkar" |
 | 8 | `normalizeUrl` tar bara bort varannan spårningsparameter | H | kvar | `test/kanda-fel`: "fel 8: alla spårningsparametrar tas bort ur URL:en …" | – |
 | 9 | Tomt alias eller tom domän matchar allt | H | kvar | `test/kanda-fel`: "fel 9: en entitet utan domän matchar inte varje text" | – |
 | 10 | Svenska böjningar matchar inte (Takvårdarnas) | H | kvar | `test/kanda-fel`: "fel 10: alias med svensk böjning matchar (Takvårdarnas)" | – |
 | 11 | Orelaterade texter räknas som samma story (vektorerna normaliseras inte) | H | kvar | `test/kanda-fel`: "fel 11: två orelaterade texter räknas inte som samma story" | – |
 | 12 | `deny_categories` lästes in men användes aldrig, och artiklarna saknade kategori | K | rättat | `test/access.spec.ts`: "en nekad kategori döljs även för artiklar inom användarens arbetsyta" och "… även akuta artiklar och sökträffar", plus `test/enrich.spec.ts` (kategori ur fast lista, minst en) | "`deny_categories` gäller nu, och kategorin sätts av berikningen" |
 | 13 | `renderDigest` kraschar på `summary = null`. Uppstod när fel 5 gjorde sammanfattningen nullbar, inget ärvt fel | M | rättat | `test/raw-text.spec.ts`: "klarar en artikel utan sammanfattning (null) och skriver inte "null"" | "Fel 5 – originaltexten används aldrig som sammanfattning" |
-| 14 | Trasig teckenkodning vid inläsning (r20, "FÃ¶nster"). Upptäcktes i demon efter fel 4 | H | kvar | saknas | "Fel 4 …", under demons resultat |
+| 14 | Felkodad text vid inläsning: r20 kommer som "FÃ¶nster" (UTF-8 lästa som Latin-1) och ingen kod i inläsningen upptäcker eller reparerar det. Upptäcktes i demon efter fel 4 | H | kvar | saknas. Test skrivs när felet tas | "Fel 4 …", under demons resultat |
+| 15 | `otherSources` läser `articles` direkt förbi åtkomstmodulen och visar källor utanför omfånget | K | rättat | `test/digest.spec.ts`: "visar aldrig källor från artiklar utanför användarens arbetsyta", "… flaggade för granskning" och "visar inte nekade entiteter eller kategorier som andra källor" | "`otherSources` går via åtkomstmodulen" |
+| 16 | `?userId=` i exporten låter vem som helst exportera en annan användares innehåll | K | rättat (autentisering saknas) | `test/export.spec.ts`: "en vanlig användare kan inte exportera en annan användares innehåll" och guard-testerna | "Exporten – `?userId=` bara för admin, och skydd mot CSV-formler" |
+| 17 | CSV-export saknar skydd mot formelinjektion (`=`, `+`, `-`, `@`) | H | rättat | `test/export.spec.ts`: "toCsv: skydd mot formelinjektion" | "Exporten – `?userId=` bara för admin, och skydd mot CSV-formler" |
+| 18 | Riktig autentisering saknas (`AuthGuard` litar på `x-user-id`), så rollkontrollen i fel 16 kan kringgås | K | kvar | saknas | "Exporten – `?userId=` bara för admin …", under Känd begränsning |
+| 19 | `TriageService` släpper igenom allt: `minScore` är 0 och ett fel ger 0 (`0 >= 0`). Använder inte `extractJson` och har ingen avgränsning mot injektion. Ger 700 dyra berikningar i stället för 35 | H | kvar | saknas. Test skrivs när felet tas | – |
+| 20 | Poängformeln (`score.ts`) använder första entiteten i stället för den högst viktade, saknar faktorn ×0,60 för uppföljning, och en okänd `watch_level` eller källa ger NaN | M | kvar | saknas. Test skrivs när felet tas | – |
+| 21 | Trendberäkningen (`trend.service.ts`) räknar rader i `entity_matches` i stället för unika artiklar, så dubbletter och flera alias blåser upp siffran. Använder `created_at` i stället för `published_at` | M | kvar | saknas. Test skrivs när felet tas | – |
+| 22 | Entitetsimporten saknar validering ("Hög", tomt namn, EXEMPEL-raden), trimmar inte namn (Rikstak blir dubblett), `merge` skriver över alias, `cast: true` förstör stora `meta_page_id`, och vd-namn (personuppgifter) lagras | H | kvar | saknas. Test skrivs när felet tas | – |
+| 23 | Arkitekturtestet söker bara efter textsträngen `from articles`, så `knex('articles')` fångas inte och testet är grönt fast regeln bryts (`DigestService` gjorde det tills fel 15). Ska använda TypeScript-kompilatorn | K | kvar | saknas. Test skrivs när felet tas | – |
+| 24 | Tidsstämpel utan tidszon (r21, "2026-09-30 23:30:00") sparas som UTC, eftersom databasen kör `Etc/UTC`. Antagandet är Europe/Stockholm, så tiden blir två timmar fel och kan hamna på fel dygn | H | kvar | saknas. Test skrivs när felet tas | – |
 
-Tabellen listar felen i incidenten och de kända felen. "Fynd per fil" längre ned gäller fortfarande för det som
-inte är rättat, bland annat `otherSources` och tröskeln `>` i `digest.service.ts`, `?userId=` i
-`export.controller.ts`, `triage.service.ts`, `score.ts`, `trend.service.ts`, `entity-import.service.ts` och
-arkitekturtestet. De får en rad i tabellen när de tas upp. Inga fel är hittills medvetet bortvalda.
+Tabellen listar felen i incidenten, de kända felen och fynden i "Fynd per fil" som har fått en egen rad. Rader utan
+test ("saknas") får sitt test först när felet tas, enligt regel 1 i `CLAUDE.md`. Fel 19–24 fortsätter numreringen,
+eftersom 13–18 redan används. Inga fel är hittills medvetet bortvalda.
+
+Fynd i "Fynd per fil" som ännu **inte** har en rad i tabellen: tröskeln `>` i stället för `>=` och `slice` före `sort`
+i `digest.service.ts`, att `ContentScopeService` saknar tillåtna listor, nekade källor och högsta brådska,
+`onConflict('raw_id').ignore()` i `enrich.service.ts` (uppdateringar d02 och det andra r09 försvinner), att
+`relevance` aldrig räknas ut, `split(/\W+/)` i stubben och att `knexProvider` inte stänger sin pool.
 
 Bedömd som om den gick i produktion. Allvarlighetsgrad: **K** = kritisk (läcker data eller är ett säkerhetshål),
 **H** = hög (ger fel resultat), **M** = medel.

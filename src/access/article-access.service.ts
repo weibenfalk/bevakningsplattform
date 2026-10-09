@@ -1,12 +1,31 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX } from '../db/knex.provider';
-import { ContentScopeService } from './content-scope.service';
+import { ContentScope, ContentScopeService } from './content-scope.service';
 
 export interface ArticleQuery {
   q?: string;
   sort?: string;
   limit?: number;
+}
+
+/** En artikelrad så som den lämnar åtkomstmodulen. Ingen fulltext. */
+export interface ArticleRow {
+  id: number;
+  raw_id: string;
+  url: string;
+  source_name: string | null;
+  title: string;
+  summary: string | null;
+  spaces: string[];
+  urgency: string;
+  impact: number | null;
+  confidence: number | null;
+  relevance: number | null;
+  cluster_id: string | null;
+  entity_ids: string[];
+  categories: string[];
+  published_at: Date | null;
 }
 
 /**
@@ -39,10 +58,8 @@ export class ArticleAccessService {
     private readonly scopes: ContentScopeService,
   ) {}
 
-  async forUser(userId: string, opts: ArticleQuery = {}) {
-    const { column, order } = parseSort(opts.sort);
-    const scope = await this.scopes.get(userId);
-
+  /** Villkoren som alltid gäller: omfånget, nekade entiteter och kategorier, och inga flaggade artiklar. */
+  private scoped(scope: ContentScope): Knex.QueryBuilder {
     // Arbetsytan är en hård gräns, även för akuta händelser. Lägg aldrig till en
     // orWhere här: den skulle förbigå alla filter som läggs på nedan.
     const query = this.knex('articles')
@@ -55,6 +72,14 @@ export class ArticleAccessService {
     if (scope.denyCategories.length) {
       query.whereNot('categories', '&&', scope.denyCategories);
     }
+    return query;
+  }
+
+  async forUser(userId: string, opts: ArticleQuery = {}): Promise<ArticleRow[]> {
+    const { column, order } = parseSort(opts.sort);
+    const scope = await this.scopes.get(userId);
+
+    const query = this.scoped(scope);
     if (opts.q) {
       query.andWhereRaw(`search_vector @@ websearch_to_tsquery('swedish', ?)`, [opts.q]);
     }
@@ -62,6 +87,29 @@ export class ArticleAccessService {
     return query
       .select(PUBLIC_COLUMNS as unknown as string[])
       .orderBy([{ column, order }, { column: 'id', order: 'asc' }])
-      .limit(opts.limit ?? 100);
+      .limit(opts.limit ?? 100) as unknown as Promise<ArticleRow[]>;
+  }
+
+  /**
+   * Andra källor som rapporterat samma story, per kluster. Går genom samma omfång som övrig läsning,
+   * så att man aldrig ser en källa från en artikel man inte får se. En fråga för alla kluster (inte en per artikel).
+   */
+  async sourcesByCluster(
+    userId: string,
+    clusterIds: string[],
+  ): Promise<Map<string, { id: number; url: string; source_name: string }[]>> {
+    const result = new Map<string, { id: number; url: string; source_name: string }[]>();
+    if (!clusterIds.length) return result;
+    const scope = await this.scopes.get(userId);
+    const rows: { id: number; cluster_id: string; url: string; source_name: string }[] = await this.scoped(scope)
+      .whereIn('cluster_id', clusterIds)
+      .select('id', 'cluster_id', 'url', 'source_name')
+      .orderBy('id');
+    for (const r of rows) {
+      const list = result.get(r.cluster_id) ?? [];
+      list.push({ id: r.id, url: r.url, source_name: r.source_name });
+      result.set(r.cluster_id, list);
+    }
+    return result;
   }
 }

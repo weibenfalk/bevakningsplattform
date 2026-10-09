@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Request } from 'express';
 
 export interface AuthedRequest extends Request {
-  user: { id: string };
+  user: { id: string; isAdmin: boolean };
 }
 
 /**
@@ -15,7 +15,9 @@ export class AuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<AuthedRequest>();
     const userId = req.header('x-user-id');
     if (!userId) throw new UnauthorizedException();
-    req.user = { id: userId };
+    // Rollen kommer från serverns konfiguration och aldrig från anropet. Se beslutsloggen: riktig autentisering saknas.
+    const admins = (process.env.ADMIN_USER_IDS ?? '').split(',').map((id) => id.trim()).filter(Boolean);
+    req.user = { id: userId, isAdmin: admins.includes(userId) };
     return true;
   }
 }

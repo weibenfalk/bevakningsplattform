@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { ArticleAccessService } from '../access/article-access.service';
 import { AuthGuard, AuthedRequest } from '../auth/auth.guard';
@@ -16,6 +16,9 @@ export class ExportController {
     @Query('userId') userId?: string,
     @Query('sort') sort?: string,
   ) {
+    if (userId && userId !== req.user.id && !req.user.isAdmin) {
+      throw new ForbiddenException('Bara en admin kan exportera en annan användares innehåll');
+    }
     const rows = await this.access.forUser(userId ?? req.user.id, { sort, limit: 5000 });
     res.type('text/csv').send(toCsv(rows, ['id', 'title', 'url', 'relevance']));
   }

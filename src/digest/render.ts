@@ -1,5 +1,3 @@
-import { marked } from 'marked';
-
 export interface DigestArticle {
   title: string;
   url: string;
@@ -12,17 +10,35 @@ const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+/** Bara http och https får bli länkar. Allt annat (javascript:, data:, relativa adresser) renderas inte. */
+function safeHref(url: string): string | null {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 const LINK = 'color:#12294D;font-weight:600;text-decoration:none';
 const TEXT = 'color:#5A6473;font-size:14px;line-height:21px;margin:6px 0 0';
 
 function renderItem(a: DigestArticle): string {
   const sources = a.otherSources
-    .map((s) => `<a href="${encodeURI(s.url)}">${escapeHtml(s.source_name)}</a>`)
+    .flatMap((s) => {
+      const href = safeHref(s.url);
+      return href ? [`<a href="${escapeHtml(href)}">${escapeHtml(s.source_name)}</a>`] : [];
+    })
     .join(' · ');
 
+  const href = safeHref(a.url);
+  const title = href
+    ? `<a href="${escapeHtml(href)}" style="${LINK}">${escapeHtml(a.title)}</a>`
+    : `<span style="${LINK}">${escapeHtml(a.title)}</span>`;
+
   return `<tr><td style="padding:16px 24px">
-    <a href="${encodeURI(a.url)}" style="${LINK}">${escapeHtml(a.title)}</a>
-    ${a.summary ? `<p style="${TEXT}">${marked.parseInline(a.summary)}</p>` : ''}
+    ${title}
+    ${a.summary ? `<p style="${TEXT}">${escapeHtml(a.summary)}</p>` : ''}
     ${sources ? `<p style="${TEXT}">Även: ${sources}</p>` : ''}
   </td></tr>`;
 }

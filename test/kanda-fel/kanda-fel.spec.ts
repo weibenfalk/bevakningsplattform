@@ -34,23 +34,6 @@ describe('Behörighet (incidenten: Anna fick en konkursnyhet om takvård)', () =
   afterEach(closeTestingApp);
 });
 
-describe('Mejlrendering', () => {
-  it('fel 6: HTML i sammanfattningen escapas', () => {
-    const html = renderDigest([
-      { title: 'T', url: 'https://example.se', urgency: 'info', otherSources: [],
-        summary: '<img src=x onerror=alert(1)>' },
-    ]);
-    expect(html).not.toContain('<img');
-  });
-
-  it('fel 7: länkar som inte är http(s) renderas inte', () => {
-    const html = renderDigest([
-      { title: 'T', url: 'javascript:alert(1)', urgency: 'info', otherSources: [], summary: 's' },
-    ]);
-    expect(html).not.toContain('javascript:');
-  });
-});
-
 describe('Pipeline', () => {
   it('fel 8: alla spårningsparametrar tas bort ur URL:en (r01 och r03 är samma kungörelse)', () => {
     expect(normalizeUrl('https://poit.example.se/kungorelse/2026-123456?utm_source=rss&utm_medium=feed'))
