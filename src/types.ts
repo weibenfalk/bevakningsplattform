@@ -1,4 +1,6 @@
-export type Space = 'koncern' | 'takvard' | 'fonsterputs';
+/** Fast lista över arbetsytor. Används både som typ och för att validera AI-svar. */
+export const SPACES = ['koncern', 'takvard', 'fonsterputs'] as const;
+export type Space = (typeof SPACES)[number];
 export type Urgency = 'akut' | 'agera' | 'bevaka' | 'info';
 export type WatchLevel = 'critical' | 'high' | 'normal' | 'low';
 

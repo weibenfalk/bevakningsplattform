@@ -33,12 +33,6 @@ describe('Behörighet (incidenten: Anna fick en konkursnyhet om takvård)', () =
   });
   afterEach(closeTestingApp);
 
-  it('fel 4: en artikel som AI:n inte kunde knyta till ett affärsområde hamnar inte hos alla', async () => {
-    await app.get(EnrichService).run([konkurs]); // stubben svarar business_areas: []
-    const rows = await access.forUser('u-anna');
-    expect(rows.map((r) => r.raw_id)).not.toContain('r01');
-  });
-
   it('fel 5: när AI:n svarar fel hamnar inte originaltexten i sammanfattningen', async () => {
     const broken: LlmProvider = { embed: async () => [], complete: async () => 'inte JSON' };
     const enrich = app.get(EnrichService) as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };

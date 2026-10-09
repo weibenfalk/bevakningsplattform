@@ -1,5 +1,3 @@
-import { Space } from '../types';
-
 export const pipelineConfig = {
   triage: {
     batchSize: 20,
@@ -11,8 +9,5 @@ export const pipelineConfig = {
   digest: {
     threshold: 55,
     maxItems: 18,
-  },
-  defaults: {
-    spaces: ['takvard', 'fonsterputs'] as Space[],
   },
 };

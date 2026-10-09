@@ -96,4 +96,10 @@ describe('ArticleAccessService: omfånget är en hård gräns', () => {
     const rows = await access.forUser('u-anna', { q: 'fönster' });
     expect(rows.map((r) => r.raw_id)).toEqual(['k3']);
   });
+
+  it('en artikel flaggad för granskning visas aldrig, även om arbetsytan stämmer', async () => {
+    await seedArticles([{ raw_id: 'f1', spaces: ['fonsterputs'], urgency: 'info', needs_review: true }]);
+    const rows = await access.forUser('u-anna');
+    expect(rows.map((r) => r.raw_id)).not.toContain('f1');
+  });
 });

@@ -45,7 +45,9 @@ export class ArticleAccessService {
 
     // Arbetsytan är en hård gräns, även för akuta händelser. Lägg aldrig till en
     // orWhere här: den skulle förbigå alla filter som läggs på nedan.
-    const query = this.knex('articles').where('spaces', '&&', scope.spaces);
+    const query = this.knex('articles')
+      .where('spaces', '&&', scope.spaces)
+      .where('needs_review', false);
 
     if (scope.denyEntities.length) {
       query.whereNot('entity_ids', '&&', scope.denyEntities);

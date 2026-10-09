@@ -47,8 +47,38 @@
 **Kvarstående antagande:** Äldre rader med tom `categories` döljs inte av `deny_categories`. Nya rader får alltid minst en kategori. Stubben (`StubProvider`) svarar `ovrigt`, vilket är en testersättare för modellens svar och inget standardvärde i produktionskoden.
 **Bevis:** `fel 12` och `fel 12b` gick från rött till grönt och är flyttade till `test/access.spec.ts`. Nya tester i `test/enrich.spec.ts` täcker validering mot listan, kravet på minst en kategori och lagring av kategorin.
 
+## 2026-10-09: Fel 4 – ett AI-svar utan giltig arbetsyta publiceras inte (fail closed)
+
+**Problem:** Om modellen inte angav `business_areas` fick artikeln standardvärdet `takvard` + `fonsterputs`. Stubben svarade alltid `[]`, så allt hamnade hos båda arbetsytorna, och det var en av tre orsaker till incidenten.
+**Beslut (fail closed):**
+- Standardvärdet är borttaget från `pipeline.config.ts`.
+- `business_areas` valideras mot en fast lista (`SPACES`: koncern, takvard, fonsterputs) med **minst ett värde**, på samma sätt som kategorierna.
+- Ett svar utan giltig arbetsyta är ogiltigt. Artikeln sparas då med `spaces = []`, `needs_review = true` och en `review_reason`. Den publiceras inte och når ingen användare.
+- Åtkomstmodulen filtrerar dessutom `needs_review = false`, som ett andra skydd. Det räcker alltså inte att `spaces` råkar vara tom.
+- Kolumnerna `needs_review` och `review_reason` ligger i den första migrationen (samma motivering som för `categories`).
+- Fel får aldrig leda till att en artikel når fler. Det är principen för alla felvägar.
+
+**Alternativ:**
+1. *Standardvärde* (förra beteendet, eller ett annat som `koncern`). Det avvisades eftersom ett osäkert svar då blir ett tyst beslut som ser riktigt ut, och det är precis det som läckte. Ett annat standardvärde har samma problem.
+2. *Förbjuda AI:n att ange `koncern`.* Det avvisades. `koncern` gör bara en artikel synlig för koncernledningen, som redan ser allt. Den farliga riktningen är att koncerninnehåll (till exempel r11, börsnoteringen) **också** får `takvard` eller `fonsterputs` och når fel personer. Ett förbud löser inte det, och det skulle dessutom göra att r11 inte når någon.
+3. *Fail closed* (valt). Det enda alternativet där ett fel aldrig breddar spridningen.
+
+**Stubben** är nu deterministisk (`stubBusinessAreas`): tak-ord ger `takvard`, fönster- och puts-ord ger `fonsterputs`, Sydkust och börsnotering ger `koncern`, och inget av dem ger tom lista, som då flaggas. Demon blir därmed meningsfull. I demon flaggades r10, r14, r15, r20 och r21, och en artikel (r08) släpptes felaktigt igenom:
+- **r08** ("Rena fönster på tio minuter") matchar "fönster". Det är en falsk träff, och stubben kan inte bedöma sammanhang. Artikeln är brus men når Mikael och Anna.
+- **r10** (pumpatävling) och **r15** (klart glas) är brus utan nyckelord. De ska flaggas, så det är rätt resultat.
+- **r14** är på engelska ("Fonster" utan ö), så nyckelorden "fönster" och "puts" matchar inte.
+- **r20** har trasig teckenkodning ("FÃ¶nster"). Det är en egen bugg i inläsningen som ska rättas, och inget fel i stubben.
+- **r21** nämner Husfixarna (takvård) utan något tak-ord. Entitetskontrollen i nästa steg (se nedan) skulle fånga den.
+
+Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för fel person.
+**Känd risk som kvarstår:** En riktig modell kan felklassa en artikel, eller luras av en injektion som i r19, och ange en giltig men fel arbetsyta. Fail closed skyddar bara mot *ogiltiga* svar, inte mot *giltiga men felaktiga*.
+**Nästa steg:** Kontrollera modellens arbetsyta mot deterministiska signaler, till exempel matchade entiteters affärsområde (`entities.space`) och källans arbetsyta. Vid motsägelse ska artikeln flaggas. Det kräver också ett redaktörsgränssnitt för flaggade artiklar, som i dag bara ligger kvar i databasen (medvetet bortvalt, se ÖVERLÄMNING).
+**Rör inte:** Fel 5 (fallback till originaltexten i samma gren) är medvetet kvar till nästa steg. En ogiltig artikel sparas flaggad men har fortfarande originaltexten som `summary`.
+**Bevis:** Fel 4 gick från rött till grönt och ligger nu i `test/enrich.spec.ts`, tillsammans med tester för valideringen och stubben. `test/access.spec.ts` har ett nytt test för att flaggade artiklar aldrig visas.
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.
 - **2026-10-09, jag avvisade AI:ns förslag:** AI:n föreslog att `ovrigt` skulle bli standardkategori när modellen inte anger någon. Jag avvisade det, eftersom det upprepar mönstret i fel 4 (ett tyst standardvärde som ser ut som ett riktigt beslut). Artikeln skulle dessutom hamna i en kategori som ingen valt, och `deny_categories` skulle behandla den som det. Rätt beteende är att ett svar utan kategori är ogiltigt. Lärdom: AI:n föreslår gärna en mjuk standard för att slippa fel. Granska varje förslag om "standardvärde" mot fel 4.
 - **2026-10-09, AI gissade:** innan specen fanns i repot gissade AI:n både kategorilistan och citatet "berikningen ger … kategori". Citatet stämde (specens avsnitt om berikning), men listan var påhittad. Den byttes mot en lista som bygger på specens avsnitt 1.
+- **2026-10-09, AI hade fel (arbetsyta för koncern):** En AI-assistent som jag använde för planering, utanför terminalen, föreslog först att AI:n i berikningen aldrig skulle få välja arbetsytan koncern, som skydd mot injektion. Felet upptäcktes vid genomgång innan något implementerades. Koncern gör bara en artikel synlig för koncernledningen, som redan ser allt. Den farliga riktningen är den motsatta: att koncerninnehåll (som r11, börsnoteringen) också får takvard eller fonsterputs och når fel personer. Ett förbud hade dessutom gjort att r11 inte nådde någon alls. Lärdom: analysera åt vilket håll ett fel läcker innan man väljer skydd.

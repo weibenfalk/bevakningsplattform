@@ -1,6 +1,8 @@
 import { INestApplicationContext } from '@nestjs/common';
+import { ArticleAccessService } from '../src/access/article-access.service';
 import { EnrichmentSchema, CATEGORIES } from '../src/llm/enrichment.schema';
 import { LlmProvider } from '../src/llm/llm.provider';
+import { stubBusinessAreas } from '../src/llm/stub.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
 import { closeTestingApp, createTestingApp, testKnex } from './helpers';
 
@@ -36,6 +38,31 @@ describe('Kategori från berikningen', () => {
     beforeEach(async () => { app = await createTestingApp(); });
     afterEach(closeTestingApp);
 
+    it('ett AI-svar utan giltig arbetsyta publiceras inte, utan sparas flaggad för granskning', async () => {
+      for (const business_areas of [[], ['påhittad']]) {
+        const llm: LlmProvider = {
+          embed: async () => [],
+          complete: async () => JSON.stringify({
+            summary: 's', business_areas, categories: ['konkurrent'], urgency: 'info', impact: 10, confidence: 0.9,
+          }),
+        };
+        const enrich = app.get(EnrichService);
+        const internals = enrich as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
+        internals.llm = llm;
+        internals.triage.llm = llm;
+        await testKnex()('articles').where({ raw_id: 'r01' }).delete();
+        await enrich.run([item]);
+
+        const row = await testKnex()('articles').where({ raw_id: 'r01' }).first();
+        expect(row).toBeDefined();
+        expect(row.needs_review).toBe(true);
+        for (const user of ['u-anna', 'u-kalle', 'u-mikael']) {
+          const rows = await app.get(ArticleAccessService).forUser(user);
+          expect(rows.map((r) => r.raw_id)).not.toContain('r01');
+        }
+      }
+    });
+
     it('sparar kategorin på artikeln', async () => {
       const llm: LlmProvider = {
         embed: async () => [],
@@ -48,5 +75,19 @@ describe('Kategori från berikningen', () => {
       const row = await testKnex()('articles').where({ raw_id: 'r01' }).first();
       expect(row?.categories).toEqual(['konkurrent']);
     });
+  });
+});
+
+describe('Arbetsyta från berikningen', () => {
+  it('avvisar ett svar utan arbetsyta och en arbetsyta utanför listan', () => {
+    expect(EnrichmentSchema.safeParse(enrichment({ categories: ['regler'], business_areas: [] })).success).toBe(false);
+    expect(EnrichmentSchema.safeParse(enrichment({ categories: ['regler'], business_areas: ['påhittad'] })).success).toBe(false);
+  });
+
+  it('stubben ger arbetsyta efter nyckelord, och tom lista när inget stämmer', () => {
+    expect(stubBusinessAreas('Takvårdarna går i konkurs')).toEqual(['takvard']);
+    expect(stubBusinessAreas('Fönsterputsare söks')).toEqual(['fonsterputs']);
+    expect(stubBusinessAreas('Koncernen planerar börsnotering')).toEqual(['koncern']);
+    expect(stubBusinessAreas('Rekordpumpa i Nybro')).toEqual([]);
   });
 });
