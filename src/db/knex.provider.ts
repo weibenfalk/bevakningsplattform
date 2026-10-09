@@ -1,4 +1,5 @@
 import knex, { Knex } from 'knex';
+import { resolveDatabaseUrl } from '../config/database';
 
 export const KNEX = Symbol('KNEX');
 
@@ -7,7 +8,7 @@ export const knexProvider = {
   useFactory: (): Knex =>
     knex({
       client: 'pg',
-      connection: process.env.DATABASE_URL,
+      connection: resolveDatabaseUrl(),
       pool: { min: 0, max: 10 },
     }),
 };

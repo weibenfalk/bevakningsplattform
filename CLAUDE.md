@@ -65,6 +65,7 @@ larmmotor och kalibrering av trösklar.
 ```bash
 npm install && npm run db:up && npm run migrate
 npm run demo
+npm start                # servern på 127.0.0.1:3000 (PORT, HOST, DATABASE_URL, ADMIN_USER_IDS)
 npm test
 npm run test:kanda-fel
 npm run typecheck
