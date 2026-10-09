@@ -3,7 +3,7 @@ import { marked } from 'marked';
 export interface DigestArticle {
   title: string;
   url: string;
-  summary: string;
+  summary: string | null;
   urgency: string;
   otherSources: { url: string; source_name: string }[];
 }
@@ -22,7 +22,7 @@ function renderItem(a: DigestArticle): string {
 
   return `<tr><td style="padding:16px 24px">
     <a href="${encodeURI(a.url)}" style="${LINK}">${escapeHtml(a.title)}</a>
-    <p style="${TEXT}">${marked.parseInline(a.summary)}</p>
+    ${a.summary ? `<p style="${TEXT}">${marked.parseInline(a.summary)}</p>` : ''}
     ${sources ? `<p style="${TEXT}">Även: ${sources}</p>` : ''}
   </td></tr>`;
 }

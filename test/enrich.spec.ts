@@ -63,6 +63,18 @@ describe('Kategori från berikningen', () => {
       }
     });
 
+    it('när AI:n svarar fel sparas ingen sammanfattning (inte originaltexten) och artikeln flaggas', async () => {
+      const broken: LlmProvider = { embed: async () => [], complete: async () => 'inte JSON' };
+      const enrich = app.get(EnrichService);
+      const internals = enrich as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
+      internals.llm = broken;
+      internals.triage.llm = broken;
+      await enrich.run([item]);
+      const row = await testKnex()('articles').where({ raw_id: 'r01' }).first();
+      expect(row?.summary).toBeNull();
+      expect(row?.needs_review).toBe(true);
+    });
+
     it('sparar kategorin på artikeln', async () => {
       const llm: LlmProvider = {
         embed: async () => [],

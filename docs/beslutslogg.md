@@ -76,6 +76,18 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 **Rör inte:** Fel 5 (fallback till originaltexten i samma gren) är medvetet kvar till nästa steg. En ogiltig artikel sparas flaggad men har fortfarande originaltexten som `summary`.
 **Bevis:** Fel 4 gick från rött till grönt och ligger nu i `test/enrich.spec.ts`, tillsammans med tester för valideringen och stubben. `test/access.spec.ts` har ett nytt test för att flaggade artiklar aldrig visas.
 
+## 2026-10-09: Fel 5 – originaltexten används aldrig som sammanfattning
+
+**Problem:** När AI-svaret var ogiltigt blev `summary = item.text.slice(0, 600)`. En kort artikel gick då ut i sin helhet, och det var en av incidentens tre orsaker.
+**Beslut:** Ett ogiltigt svar ger `summary = null`, och artikeln är redan flaggad och dold sedan fel 4. `renderDigest` klarar `summary: null` (ingen text i stället för en krasch).
+**Alternativ:** (a) Korta av texten ännu mer eller välja första meningen. Det är fortfarande originaltext, och upphovsrätt och läckage består. (b) Skriva en platshållare som "Sammanfattning saknas" i `summary`. Då blir ett fel ett värde som ser riktigt ut, vilket är mönstret i fel 4. `null` går inte att förväxla med en sammanfattning. (c) Försöka igen med en annan modell. Det är rätt på sikt (AI-routern, bortvald), men ändrar inte vad som får lagras när alla försök misslyckas.
+**Granskning av andra vägar för råtext:**
+- `full_text` skrivs bara av `EnrichService` (för att kunna granskas och köras om). Åtkomstmodulen väljer sedan fel 3 explicita kolumner och lämnar aldrig ut den.
+- Mejlet (`DigestService` → `renderDigest`) får sina rader från åtkomstmodulen, och `renderDigest` skriver bara ut titel, url, sammanfattning och andra källor. Exporten skriver bara `id, title, url, relevance`.
+- Tester: mejlet och exporten innehåller inte fulltexten, och ett arkitekturtest slår larm om någon annan fil än berikningen eller åtkomstmodulen nämner `full_text`. De flesta av dessa var redan gröna sedan fel 3. De är nu ett skydd mot regression.
+- Kvarstår: `title` kommer från råposten och är inte validerad. `otherSources` läser fortfarande `articles` direkt (kodgranskningen, `digest.service.ts`). Titeln i mejlet escapas, men `summary` renderas fortfarande via `marked` (fel 6). `scripts/demo.ts` läser `full_text` direkt ur databasen för att visa läckan, och det är en diagnostikdel och ingen användarväg.
+**Bevis:** Fel 5 gick från rött till grönt och ligger nu i `test/enrich.spec.ts`. `test/raw-text.spec.ts` är ny.
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.

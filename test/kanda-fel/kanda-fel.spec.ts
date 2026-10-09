@@ -32,16 +32,6 @@ describe('Behörighet (incidenten: Anna fick en konkursnyhet om takvård)', () =
     access = app.get(ArticleAccessService);
   });
   afterEach(closeTestingApp);
-
-  it('fel 5: när AI:n svarar fel hamnar inte originaltexten i sammanfattningen', async () => {
-    const broken: LlmProvider = { embed: async () => [], complete: async () => 'inte JSON' };
-    const enrich = app.get(EnrichService) as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
-    enrich.llm = broken;
-    enrich.triage.llm = broken;
-    await app.get(EnrichService).run([konkurs]);
-    const row = await testKnex()('articles').where({ raw_id: 'r01' }).first();
-    expect(row?.summary ?? '').not.toContain(konkurs.text);
-  });
 });
 
 describe('Mejlrendering', () => {

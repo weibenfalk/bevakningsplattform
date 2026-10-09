@@ -41,7 +41,8 @@ export class EnrichService {
 
       const data = parsed.success
         ? parsed.data
-        : { summary: item.text.slice(0, 600), business_areas: [] as never[], categories: [] as never[], urgency: 'info' as const, impact: 0, confidence: 0 };
+        // Ogiltigt svar: ingen sammanfattning. Originaltexten får aldrig användas i dess ställe.
+        : { summary: null, business_areas: [] as never[], categories: [] as never[], urgency: 'info' as const, impact: 0, confidence: 0 };
 
       await this.knex('articles')
         .insert({
