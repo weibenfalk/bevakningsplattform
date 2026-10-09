@@ -20,10 +20,9 @@ export class ArticleAccessService {
   async forUser(userId: string, opts: ArticleQuery = {}) {
     const scope = await this.scopes.get(userId);
 
-    const query = this.knex('articles')
-      .where('spaces', '&&', scope.spaces)
-      // akuta händelser ska alltid nå ut
-      .orWhere('urgency', 'akut');
+    // Arbetsytan är en hård gräns, även för akuta händelser. Lägg aldrig till en
+    // orWhere här: den skulle förbigå alla filter som läggs på nedan.
+    const query = this.knex('articles').where('spaces', '&&', scope.spaces);
 
     if (scope.denyEntities.length) {
       query.whereNot('entity_ids', '&&', scope.denyEntities);

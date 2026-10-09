@@ -33,19 +33,6 @@ describe('Behörighet (incidenten: Anna fick en konkursnyhet om takvård)', () =
   });
   afterEach(closeTestingApp);
 
-  it('fel 1: en akut takvårdsnyhet når inte en användare som bara har fönsterputs', async () => {
-    await seedArticles([{ raw_id: 'r01', spaces: ['takvard'], urgency: 'akut', relevance: 90 }]);
-    const rows = await access.forUser('u-anna');
-    expect(rows.map((r) => r.raw_id)).not.toContain('r01');
-  });
-
-  it('fel 2: en nekad entitet döljs även för artiklar inom användarens arbetsyta', async () => {
-    await testKnex()('content_scopes').where({ user_id: 'u-anna' }).update({ deny_entities: ['e-hemlig'] });
-    await seedArticles([{ raw_id: 'x1', spaces: ['fonsterputs'], urgency: 'info', entity_ids: ['e-hemlig'] }]);
-    const rows = await access.forUser('u-anna');
-    expect(rows.map((r) => r.raw_id)).not.toContain('x1');
-  });
-
   it('fel 3: åtkomstmodulen lämnar aldrig ut fulltexten', async () => {
     await seedArticles([{ raw_id: 'r16', spaces: ['fonsterputs'], urgency: 'info', full_text: 'Hela texten' }]);
     const [row] = await access.forUser('u-anna');

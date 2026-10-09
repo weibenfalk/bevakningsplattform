@@ -20,6 +20,13 @@
 
 `npm audit --omit=dev` ger 0 sårbarheter. De varningar som finns gäller Jests egna verktyg för testtäckning, inte applikationen.
 
+## 2026-10-09: Fel 1 – akuta nyheter går förbi arbetsytan
+
+**Beslut:** Arbetsytan är en hård gräns, även för akuta händelser. `orWhere('urgency', 'akut')` är borttagen i `ArticleAccessService`.
+**Alternativ:** (a) Behålla en bypass för akuta nyheter men begränsa den till användare med rätt roll. (b) Låta akuta nyheter gå igenom men dölja `full_text`. Båda bryter antagandet att arbetsytan är en hård gräns, och risken är redan inträffad: Anna fick en konkursnyhet om takvård.
+**Varför:** `orWhere` gjorde att `urgency = 'akut'` räckte ensamt. Det förbigick också nekade entiteter och sökfiltret, eftersom AND binder hårdare än OR. Därför blev fel 2 grönt av samma ändring. Rättningen är medvetet minimal: fel 3 (`select('*')`) och SQL-injektionen via `sort` ligger i samma fil men tas som egna steg med egna tester. Om företaget vill att akuta nyheter ska nå fler än arbetsytan, ska det bli en uttrycklig regel i `ContentScopeService` och inte en bypass i frågan.
+**Bevis:** Fel 1 och 2 gick från rött till grönt och är flyttade till `test/access.spec.ts`.
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.
