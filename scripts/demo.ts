@@ -94,8 +94,8 @@ async function main() {
   }
 
   console.log(
-    '\nObs: ingen kod i den ärvda kodbasen räknar ut "relevance", så det riktiga utskicket\n' +
-      '(DigestService) skulle filtrera bort allt. Förhandsvisningen hoppar över den tröskeln.\n',
+    '\nObs: relevansen räknas nu ut i berikningen, men entitetsvikten är missvisande så länge fel 9 (tom domän\n' +
+      'matchar all text) är kvar. Förhandsvisningen hoppar över utskickets tröskel och visar alla artiklar.\n',
   );
 
   await app.close();

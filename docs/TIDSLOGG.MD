@@ -2,7 +2,7 @@
 
 30 minuter
 
-# Fel 1-5 och 12 som uppkom
+# Fel 1-7 och 12 som uppkom
 
-40 minuter
+60 minuter
 

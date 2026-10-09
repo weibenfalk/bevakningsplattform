@@ -4,6 +4,7 @@ import { EnrichmentSchema, CATEGORIES } from '../src/llm/enrichment.schema';
 import { LlmProvider } from '../src/llm/llm.provider';
 import { stubBusinessAreas } from '../src/llm/stub.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
+import { DigestService } from '../src/digest/digest.service';
 import { closeTestingApp, createTestingApp, testKnex } from './helpers';
 
 const item = {
@@ -103,3 +104,76 @@ describe('Arbetsyta från berikningen', () => {
     expect(stubBusinessAreas('Rekordpumpa i Nybro')).toEqual([]);
   });
 });
+
+describe('Relevans kopplad till pipelinen', () => {
+  let app: INestApplicationContext;
+  beforeEach(async () => { app = await createTestingApp(); });
+  afterEach(closeTestingApp);
+
+  const llmWith = (extra: Record<string, unknown>): LlmProvider => ({
+    embed: async () => [],
+    complete: async () => JSON.stringify({
+      summary: 's', business_areas: ['takvard'], categories: ['konkurrent'], urgency: 'info', impact: 80, confidence: 0.9, ...extra,
+    }),
+  });
+  const useLlm = (llm: LlmProvider) => {
+    const enrich = app.get(EnrichService);
+    const internals = enrich as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
+    internals.llm = llm;
+    internals.triage.llm = llm;
+    return enrich;
+  };
+  const row = () => testKnex()('articles').where({ raw_id: 'r01' }).first();
+  const NOW = new Date('2026-10-01T07:00:00+02:00');
+
+  it('relevance räknas ut och sparas, och utskicket blir inte tomt', async () => {
+    await useLlm(llmWith({})).run([item], NOW);
+    const saved = await row();
+    expect(Number.isInteger(saved.relevance)).toBe(true);
+    const html = await app.get(DigestService).compose('u-kalle');
+    expect(html).toContain('Konkursbeslut');
+  });
+
+  it('källvikten kommer från sources.json (Bolagsverket väger mer än en blogg)', async () => {
+    const enrich = useLlm(llmWith({}));
+    await enrich.run([item], NOW);
+    const official = (await row()).relevance;
+    await testKnex()('articles').where({ raw_id: 'r01' }).delete();
+    await enrich.run([{ ...item, source: 'blogg' }], NOW);
+    expect((await row()).relevance).toBeLessThan(official);
+  });
+
+  it('färskheten räknas mot den fasta klockan, inte mot datorns klocka', async () => {
+    const enrich = useLlm(llmWith({}));
+    await enrich.run([item], NOW);
+    const fresh = (await row()).relevance;
+    await testKnex()('articles').where({ raw_id: 'r01' }).delete();
+    await enrich.run([item], new Date('2026-11-15T07:00:00+01:00'));
+    expect((await row()).relevance).toBeLessThan(fresh);
+  });
+
+  it('entitetsvikten kommer från den högst viktade matchade entiteten, och entity_ids sparas', async () => {
+    await testKnex()('entities').insert([
+      { name: 'Takvårdarna i Småland AB', watch_level: 'low', aliases: ['Takvårdarna'], domains: ['takvardarna.se'] },
+      { name: 'Småland AB', watch_level: 'critical', aliases: ['Småland AB'], domains: ['smaland-ab.se'] },
+    ]);
+    const enrich = useLlm(llmWith({}));
+    await enrich.run([item], NOW);
+    const saved = await row();
+    expect(saved.entity_ids).toHaveLength(2);
+    const withBoth = saved.relevance;
+    await testKnex()('entities').where({ name: 'Småland AB' }).delete();
+    await testKnex()('articles').where({ raw_id: 'r01' }).delete();
+    await enrich.run([item], NOW);
+    expect((await row()).relevance).toBeLessThan(withBoth);
+  });
+
+  it('en okänd källa kan inte poängsättas, så artikeln flaggas och publiceras inte', async () => {
+    await useLlm(llmWith({})).run([{ ...item, source: 'finns-inte' }], NOW);
+    const saved = await row();
+    expect(saved.needs_review).toBe(true);
+    expect(saved.spaces).toEqual([]);
+    expect(saved.relevance).toBeNull();
+  });
+});
+

@@ -13,8 +13,8 @@ export function relevance(a: ScoredArticle, now: Date): number {
   const ageHours = (now.getTime() - Date.parse(a.publishedAt)) / 36e5;
   const freshness = clamp(100 - (Math.max(0, ageHours - 24) / (13 * 24)) * 100, 0, 100);
 
-  const primary = a.entities[0];
-  const entityWeight = primary ? ENTITY_WEIGHT[primary.watchLevel] : 0;
+  // Den högst viktade entiteten räknas, oavsett ordning. En okänd bevakningsnivå väger 0 och ger aldrig NaN.
+  const entityWeight = Math.max(0, ...a.entities.map((e) => ENTITY_WEIGHT[e.watchLevel] ?? 0));
 
   let r =
     0.4 * a.impact +

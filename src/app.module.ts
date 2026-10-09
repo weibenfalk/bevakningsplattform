@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ArticleAccessService } from './access/article-access.service';
 import { ContentScopeService } from './access/content-scope.service';
 import { ExportController } from './admin/export.controller';
+import { CLOCK, fixedClock } from './config/clock';
+import { SOURCE_WEIGHTS, loadSourceWeights } from './config/sources';
 import { knexProvider } from './db/knex.provider';
 import { DigestService } from './digest/digest.service';
 import { EntityImportService } from './import/entity-import.service';
@@ -16,6 +18,8 @@ import { TriageService } from './pipeline/triage.service';
   controllers: [ExportController],
   providers: [
     knexProvider,
+    { provide: CLOCK, useValue: fixedClock() },
+    { provide: SOURCE_WEIGHTS, useValue: loadSourceWeights() },
     { provide: LLM, useClass: StubProvider },
     ContentScopeService,
     ArticleAccessService,

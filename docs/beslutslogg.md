@@ -112,6 +112,23 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 **Känd begränsning: riktig autentisering saknas.** `AuthGuard` är en platshållare från den ärvda koden. Den litar på headern `x-user-id`, så vem som helst kan utge sig för att vara en admin genom att skicka en admins id. Rollkontrollen är därför bara ett skydd mot misstag och mot enkla angrepp, och den skyddar inte mot en angripare. I produktion krävs riktig inloggning (till exempel OIDC med signerade tokens) och roller i identitetsleverantören. Det är första punkten under nästa steg i `ÖVERLÄMNING.md`. `sort` är redan en vitlista (fel 3).
 **Bevis:** Nio tester i `test/export.spec.ts` var röda och blev gröna: rollkontroll i guarden (en roll i headern räknas inte), 403 för andras innehåll, admin får exportera, och sex fall av formelinjektion.
 
+## 2026-10-09: `relevance` räknas ut i berikningen (score.ts kopplas in)
+
+**Problem:** Ingen kod räknade ut `relevance`, så kolumnen var alltid tom. `DigestService` filtrerar på `relevance > 55`, och utskicket blev därför tomt. `score.ts` fanns men anropades aldrig.
+**Beslut:** `EnrichService` räknar ut `relevance` med `score.ts` för varje giltig artikel och sparar den.
+- **Källvikt** läses ur `data/sources.json` (`src/config/sources.ts`). En källa som saknas där kan inte poängsättas. Artikeln får då ingen poäng (`null`) och flaggas för granskning (`needs_review`) i stället för att få en gissad vikt. Det är samma princip som i fel 4: ett fel får aldrig bli ett värde som ser riktigt ut.
+- **Färskhet** räknas mot en fast klocka (`src/config/clock.ts`, standard 2026-10-01 07:00 svensk tid, kan sättas med `PIPELINE_NOW`) och inte mot datorns klocka. Då går körningar att upprepa, och dag 2 kan köras med `run(items, now)`.
+- **Entitetsvikt** kommer från den högst viktade matchade entiteten (`score.ts` tog tidigare den första). `EnrichService` matchar nu entiteter mot rubrik och text och sparar `entity_ids`. Tidigare sattes `entity_ids` aldrig, så `deny_entities` kunde inte träffa något i praktiken.
+- En okänd bevakningsnivå väger 0 i stället för NaN. Ett ogiltigt datum ger ingen poäng och flaggas, i stället för att krascha infogningen.
+**Alternativ:** (a) Standardvikt för okänd källa (till exempel 0,5). Det avvisades av samma skäl som standardvärdet i fel 4. (b) Räkna ut relevansen i en separat jobbsteg efter berikningen. Det ger fler rörliga delar utan vinst, eftersom alla indata finns vid berikningen. (c) Systemklockan. Då ändras poängen med tiden och körningarna går inte att jämföra.
+**Kända begränsningar (får vänta, enligt beslut):**
+- **Trendfaktorn** (×1,25) är inte inkopplad: `isTrending` är alltid `false`. `TrendService` räknar dessutom rader i stället för unika artiklar (fel 21).
+- **Uppföljningsfaktorn** (×0,60) finns inte alls i formeln (fel 20).
+- **Entitetsvikten är missvisande just nu.** Den bygger på `matchEntities`, som har öppna fel: tom alias eller domän matchar all text (fel 9), och böjningar missas (fel 10). Entiteterna Klart Glas och Rena Fönster har tom domän, och Rena Fönster är `critical`. Därför får i princip alla artiklar entitetsvikten 100 i demon, och `entity_ids` innehåller falska träffar. Det gäller även filtret för nekade entiteter. Fel 9 bör rättas före allt annat som beror på poängen. Entitetsimporten (fel 22) har också betydelse, eftersom nivån "Hög" ger vikt 0.
+- Tröskeln i `DigestService` är `>` i stället för `>=`. Stubbens standardpoäng (impact 50) ger exakt 55 för en källa med vikt 2 och räknas därför bort.
+- r21 saknar tidszon (fel 24), och `Date.parse` tolkar den då efter datorns tidszon.
+**Bevis:** Nytt `test/score.spec.ts` (högst viktade entiteten, NaN, källvikt, färskhet) och fem tester i `test/enrich.spec.ts` (sparad relevans och icke-tomt utskick, källvikt, fast klocka, entitetsvikt med `entity_ids`, okänd källa). Alla var röda och är gröna.
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.
