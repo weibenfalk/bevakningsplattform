@@ -17,6 +17,8 @@ let app: INestApplicationContext | undefined;
 afterAll(() => closeTestingApp());
 
 export async function createTestingApp(): Promise<INestApplicationContext> {
+  // En kvarlämnad app (t.ex. från en beforeAll) skulle annars tappa sin referens här och läcka sin pool.
+  await closeTestingApp();
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
   await knex.raw('TRUNCATE entity_matches, articles, entities, content_scopes RESTART IDENTITY');
