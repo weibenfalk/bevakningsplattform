@@ -12,7 +12,8 @@ export class EntityImportService {
 
   async importCsv(path: string): Promise<number> {
     const content = await readFile(path, 'utf8');
-    const rows = parse(content, { columns: true, skip_empty_lines: true, cast: true });
+    // Typen lades till vid uppgradering av csv-parse (nyare versioner returnerar unknown). Logiken är orörd.
+    const rows = parse<Record<string, any>>(content, { columns: true, skip_empty_lines: true, cast: true });
 
     let imported = 0;
     for (const row of rows) {

@@ -5,7 +5,7 @@ och visa hur den beter sig. Inga fel är rättade ännu.
 
 ## Kom igång
 
-Kräver Node 20+ och Docker.
+Kräver Node 22.12 eller senare och Docker.
 
 ```bash
 npm install
