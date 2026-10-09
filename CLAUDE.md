@@ -10,7 +10,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
 - `npm test`: de ärvda testerna, gröna (de testar fel saker).
-- `npm run test:kanda-fel`: tester som beskriver korrekt beteende och fallerar tills felen är rättade. Se statustabellen överst i `docs/kodgranskning.md` för vilka som återstår.
+- `npm run test:kanda-fel`: tester för kända fel som ännu inte är rättade (röda tills de rättas). Just nu finns inga, eftersom alla 11 är rättade och flyttade till `test/`. Se statustabellen överst i `docs/kodgranskning.md` för vad som återstår.
 - `npm run demo` (och `-- --trasig-ai`) visar läckorna per användare och skriver mejlförhandsvisningar till `out/`.
 - Hela kodgranskningen finns i `docs/kodgranskning.md`. Läs den innan du ändrar i `src/`.
 

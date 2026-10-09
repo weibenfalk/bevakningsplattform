@@ -219,6 +219,47 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 **Kvarstår:** Bara genitiv-s hanteras. Andra böjningar (till exempel plural eller bestämd form av ett vanligt ord) matchar inte. Ett varumärke som består av ett vanligt ord med stor bokstav först i en mening ("Klart glas är..." mot "Klart Glas") missas också.
 **Bevis:** Sju av åtta nya tester i `test/entity-matcher.spec.ts` ("ordgränser och böjning") var röda och blev gröna. Det åttonde ("domäner oberoende av skiftläge") skyddar det som redan fungerade.
 
+## 2026-10-09: Fel 11 – similarity räknar riktig cosinuslikhet (klustring saknas)
+
+**Problem:** `similarity` antog att vektorerna hade längd 1 och returnerade skalärprodukten. Stubbens vektorer är ordräkningar och har inte längd 1, så produkten blev godtyckligt stor och orelaterade texter räknades som "samma story".
+**Beslut:** `similarity` räknar riktig cosinuslikhet: skalärprodukten delad med produkten av längderna, begränsad till [-1, 1]. Den gäller alla vektorer och antar ingenting om längden, och det är det rätta även med en leverantör som lämnar ut normaliserade vektorer. En nollvektor, en tom vektor eller ett värde som inte är ett tal ger 0 i stället för NaN. Vektorer med olika längd kastar `RangeError`, eftersom de kommer från olika modeller och en tyst jämförelse vore meningslös. Medvetet **bara** likheten rättas här. Klustring byggs inte.
+**Alternativ:** (a) Normalisera vektorerna vid skapandet (i `embed`). Då gäller rättningen bara de vektorer som vi själva skapar, inte de som kommer in från en leverantör. (b) Låta olika längd ge 0. Då döljs ett konfigurationsfel (bytt modell) som annars syns direkt.
+**Kvarstår (viktigt):**
+- **Klustring saknas.** Ingen kod sätter `cluster_id`, och `isSameStory` används ingenstans. Därför skickas samma story från flera källor som separata nyheter. Det gäller r16/r17 (samma story) och r01/r02, och r01/r03 har dessutom identisk text men hamnar inte i samma kluster. "Även:"-raden i mejlet (`sourcesByCluster`) är därför alltid tom i praktiken. Kod och tester för den finns, men inga artiklar delar kluster-id.
+- **Tröskeln 0,92 är gissad.** Den är inte kalibrerad. Specen kräver att trösklar för dedupe och semantisk matchning kalibreras mot märkt data och aldrig gissas, med kriteriet **under 2 % felaktiga sammanslagningar**. Det finns ingen märkt data, och en felaktig sammanslagning döljer en nyhet för mottagaren, så den är dyrare än en missad sammanslagning.
+- **Stubben kan inte bedöma betydelse.** Stubbens "embedding" är hashade ord. Med riktig cosinuslikhet ger r01/r03 (samma text) 1,000, men r01/r02 och r16/r17 (samma story med olika ordval) bara 0,463 och 0,647, långt under 0,92. Den ger alltså inga falska sammanslagningar, men heller inga rätta för olika formuleringar. Det går inte att kalibrera mot stubben.
+**Nästa steg i överlämningen (i ordning):** (1) Bygg klustringen: sätt `cluster_id` vid berikning genom att jämföra mot artiklar de senaste dygnen. (2) Skaffa märkt data, till exempel par av nyheter som en redaktör har markerat som samma eller olika story, och kalibrera tröskeln så att felaktiga sammanslagningar blir under 2 %. (3) Byt stubben mot en riktig embeddingmodell innan kalibreringen, eftersom tröskeln beror på modellen.
+**Bevis:** Sju av nio tester i `test/similarity.spec.ts` var röda och blev gröna. Fel 11-testet flyttades dit från `test/kanda-fel`.
+
+## 2026-10-09: Inga kända fel kvar i `test/kanda-fel`
+
+**Beslut:** `test/kanda-fel/kanda-fel.spec.ts` är borttagen, eftersom alla elva kända fel är rättade och flyttade till den vanliga sviten. `npm run test:kanda-fel` kör med `--passWithNoTests` och är grönt när mappen är tom. Nya kända fel som upptäcks senare ska få sitt röda test där först (regel 1 i `CLAUDE.md`).
+
+## 2026-10-09: Dubbletter och idempotens – den normaliserade URL:en är identiteten
+
+**Problem:** Artiklar var bara unika på `raw_id`. `normalizeUrl` (fel 8) rättades men användes bara när URL:en lagrades, aldrig för att kontrollera dubbletter. r01 och r03 (samma kungörelse, olika `utm_`-parametrar) och d01 (samma URL dag 2) blev tre separata artiklar, och kungörelsen kom med två gånger i utskicket. r09 förekommer två gånger med samma id men olika URL och olika text, och den andra försvann tyst i `onConflict('raw_id').ignore()`. En omkörning gjorde dessutom nya AI-anrop för poster som redan var sparade. Specens krav 7 (idempotens) gäller: varje jobb ska kunna köras om utan dubbletter.
+**Beslut:**
+- **Identiteten är den normaliserade URL:en.** `articles.url` är `UNIQUE` (och `raw_id` är kvar som unik). `raw_id` kommer från källan och har visat sig vara opålitligt.
+- **Kontrollen görs före triage och berikning** (`src/pipeline/dedupe.ts`), mot databasen och mot tidigare poster i samma körning. En omkörning kostar därför inga AI-anrop. Den första posten vinner, oberoende av ordning.
+- Varje post hamnar i en av fem kategorier:
+  - **Ny:** går vidare.
+  - **Redan sparad** (samma id, URL och innehåll): räknas i rapporten (`alreadyStored`) och loggas inte, eftersom det inte är någon avvikelse.
+  - **`duplicate`:** samma URL och samma innehåll under ett annat id (r03, d01).
+  - **`changed_content`:** samma URL men annat innehåll (d02 uppdaterar r02). Skrivs **inte** över.
+  - **`raw_id_collision`:** samma id men en annan URL (r09).
+  - **`invalid_url`:** URL:en går inte att tolka. Tidigare kraschade hela körningen.
+- **Inget försvinner tyst.** Varje överhoppad post sparas i tabellen `skipped_items` med orsak, vilken artikel den krockade med och **hela råposten** (`payload`), och den returneras i rapporten från `EnrichService.run`. Tabellen är unik per (id, URL, orsak), så en omkörning dubblerar inte loggen. Det är den körningslogg som specens krav 7 efterfrågar för just det här steget.
+- Innehåll jämförs med en hash (`articles.content_hash`) av titel och text och inte med själva texten. Då behöver kontrollen aldrig läsa `full_text`, och arkitekturtestet som skyddar fulltexten (fel 5) fortsätter betyda något. Hashen behövs också när uppdateringar byggs.
+**Alternativ:** (a) Bara unik URL i databasen och `ON CONFLICT DO NOTHING`. Då tappas dubbletter och kollisioner tyst, och AI-anropen sker redan. (b) Ge den andra r09 ett nytt id och spara den som en egen artikel. Då skapar vi ett id som källan aldrig gav, och vi vet inte om de två är samma recension (de har olika URL:er, så troligen inte). Att logga hela posten ger samma möjlighet att köra om den senare, utan att gissa. (c) Låta den senaste vinna. Då skriver en trasig post över en bra, och uppdateringar blir osynliga. (d) Göra `raw_id` icke-unikt nu när URL:en är identiteten. Då kan den andra r09 sparas som en egen artikel bredvid den första, och `raw_id_collision` försvinner som kategori. **Det är ett öppet alternativ som vi inte valt än.** Det talar för att r09 är två olika dokument (olika URL och text), och att de då inte ska tappas. Det talar emot att `raw_id` används som nyckel på flera ställen (tester, demo, `skipped_items.existing_raw_id`) och att en källa som återanvänder ett id kan få olika dokument att se ut som ett. Det kräver också att allt som slår upp en artikel på `raw_id` byter nyckel. Vi valde att behålla `raw_id` unikt och logga hela posten tills vi vet om id-kollisionen är ett fel hos källan eller normalt beteende.
+
+**Kvarstår:**
+- **Uppdateringar tillämpas inte.** d02 (en uppdaterad version av r02) loggas som `changed_content` men skriver inte över artikeln. Det kräver ett beslut om vad en uppdatering ska göra (ersätta texten, räkna om poängen, markera som uppföljning) och hänger ihop med uppföljningsfaktorn (fel 20, ×0,60). **Beslutet tas när vi bygger körningen för dag 2.**
+- **Rensningen efter 90 dagar saknas.** Specen säger att fulltext "lagras bara för bearbetning och rensas efter 90 dagar". `skipped_items.payload` innehåller hela råposter, alltså råtext, och måste omfattas av rensningen. Det gör `articles.full_text` också, och ingen av dem rensas i dag (fel 35). Rensningen ska vara ett jobb som är säkert att köra om (krav 7) och som loggar vad det tog bort. Raden i `skipped_items` kan behållas utan `payload` (id, orsak, tid), så att loggen över vad som hoppades över finns kvar när råtexten är borta. Det är en avvägning att besluta när jobbet byggs.
+- Den andra r09 sparas som artikel först när id-problemet är löst. Posten ligger hel i `skipped_items`.
+- **Samma story från olika källor** (r01/r02, r16/r17) är inte en URL-dubblett. Det är klustringen, som saknas (fel 29).
+- En post som hoppas över som `duplicate` ger ingen ny källa i "Även:" under den första artikeln. Först med klustringen kan olika källor till samma story visas där.
+**Bevis:** 12 tester i `test/dedupe.spec.ts`, alla med de riktiga posterna ur `data/`: r01/r03/d01 (dubbletter, båda ordningarna, en gång i utskicket, unikhet i databasen), omkörning (inga nya artiklar, loggrader eller AI-anrop), d02 (ändrat innehåll), r09 (kollision, även över två körningar), ogiltig URL och `utm_`/versaler/fragment.
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.

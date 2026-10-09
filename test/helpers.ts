@@ -23,7 +23,7 @@ export async function createTestingApp(): Promise<INestApplicationContext> {
   await closeTestingApp();
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
-  await knex.raw('TRUNCATE entity_matches, articles, entities, content_scopes RESTART IDENTITY');
+  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes RESTART IDENTITY');
   const users: { id: string; scopes: string[] }[] = JSON.parse(readFileSync('data/users.json', 'utf8'));
   await knex('content_scopes').insert(users.map((u) => ({ user_id: u.id, spaces: u.scopes })));
   await knex.destroy();

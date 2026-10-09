@@ -4,5 +4,5 @@
 
 # Felrättningar
 
-90 minuter
+120 minuter
 

@@ -30,7 +30,8 @@ export async function up(knex: Knex): Promise<void> {
     CREATE TABLE articles (
       id            serial PRIMARY KEY,
       raw_id        text NOT NULL UNIQUE,
-      url           text NOT NULL,
+      -- Den normaliserade URL:en är artikelns identitet. raw_id kommer från källan och är inte pålitligt (r09 förekommer två gånger).
+      url           text NOT NULL UNIQUE,
       source_name   text,
       title         text NOT NULL,
       full_text     text,
@@ -43,12 +44,27 @@ export async function up(knex: Knex): Promise<void> {
       cluster_id    text,
       entity_ids    text[] NOT NULL DEFAULT '{}',
       categories    text[] NOT NULL DEFAULT '{}',
+      -- Hash av titel och text, för att avgöra om en post med samma URL har ändrats utan att läsa full_text.
+      content_hash  text,
       needs_review  boolean NOT NULL DEFAULT false,
       review_reason text,
       published_at  timestamptz,
       search_vector tsvector GENERATED ALWAYS AS (
         to_tsvector('swedish', coalesce(title, '') || ' ' || coalesce(summary, ''))
       ) STORED
+    );
+
+    -- Poster som berikningen hoppar över (dubbletter, ändrat innehåll, id-kollisioner, ogiltig URL).
+    -- Hela råposten sparas, så att inget försvinner tyst och posten kan köras om. Unik per post, så att en omkörning inte dubblerar loggen.
+    CREATE TABLE skipped_items (
+      id               serial PRIMARY KEY,
+      raw_id           text NOT NULL,
+      url              text NOT NULL,
+      reason           text NOT NULL,
+      existing_raw_id  text,
+      payload          jsonb NOT NULL,
+      created_at       timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (raw_id, url, reason)
     );
 
     CREATE TABLE entity_matches (
@@ -60,5 +76,5 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex.raw(`DROP TABLE entity_matches, articles, entities, content_scopes`);
+  await knex.raw(`DROP TABLE skipped_items, entity_matches, articles, entities, content_scopes`);
 }

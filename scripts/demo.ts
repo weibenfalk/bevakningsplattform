@@ -44,7 +44,7 @@ const readJson = <T>(file: string): T => JSON.parse(readFileSync(`data/${file}`,
 async function main() {
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
-  await knex.raw('TRUNCATE entity_matches, articles, entities, content_scopes RESTART IDENTITY');
+  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes RESTART IDENTITY');
 
   const users = readJson<{ id: string; name: string; role: string; scopes: string[] }[]>('users.json');
   await knex('content_scopes').insert(users.map((u) => ({ user_id: u.id, spaces: u.scopes })));
@@ -67,9 +67,12 @@ async function main() {
 
   console.log(`\n== 2. Kör pipelinen för dag 1 (${brokenAi ? 'TRASIG AI' : 'AI-stubben'})`);
   const items = [...readJson<RawItem[]>('raw_items.json'), ...readJson<RawItem[]>('raw_items_extra.json')];
-  await app.get(EnrichService).run(items);
+  const enrichReport = await app.get(EnrichService).run(items);
   const stored = await knex('articles').count<{ count: string }>('* as count').first();
-  console.log(`   ${items.length} råposter in, ${stored?.count} artiklar sparade`);
+  console.log(`   ${items.length} råposter in, ${stored?.count} artiklar sparade, ${enrichReport.skipped.length} överhoppade`);
+  for (const s of enrichReport.skipped) {
+    console.log(`   hoppade över ${s.rawId} (${s.reason})${s.existingRawId ? `, krockar med ${s.existingRawId}` : ''}`);
+  }
 
   console.log('\n== 3. Vad varje användare får se (via ArticleAccessService, samma väg som mejl, sök och export)');
   mkdirSync('out', { recursive: true });

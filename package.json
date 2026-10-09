@@ -10,7 +10,7 @@
     "demo": "ts-node scripts/demo.ts",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand --testPathIgnorePatterns /node_modules/ /kanda-fel/",
-    "test:kanda-fel": "jest --runInBand kanda-fel"
+    "test:kanda-fel": "jest --runInBand --passWithNoTests kanda-fel"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.7",

@@ -9,6 +9,7 @@ import { LLM, LlmProvider } from '../llm/llm.provider';
 import { Entity, RawItem, SPACES, WatchLevel } from '../types';
 import { matchEntities } from './entity-matcher';
 import { relevance } from './score';
+import { contentHash, SkippedItem, splitFresh } from './dedupe';
 import { prepareItem } from './ingest';
 import { normalizeUrl } from './normalize-url';
 import { TriageService } from './triage.service';
@@ -19,6 +20,13 @@ Svara enbart med JSON: summary (högst tre meningar, egna ord),
 business_areas (minst ett värde ur: ${SPACES.join(', ')}),
 categories (lista med värden ur: ${CATEGORIES.join(', ')}),
 urgency (akut, agera, bevaka eller info), impact (0-100) och confidence (0-1).`;
+
+export interface EnrichReport {
+  /** Poster som hoppades över, med orsak. Samma poster finns i tabellen `skipped_items`. */
+  skipped: SkippedItem[];
+  /** Poster som redan var sparade och kördes om utan ändring. */
+  alreadyStored: number;
+}
 
 @Injectable()
 export class EnrichService {
@@ -32,16 +40,21 @@ export class EnrichService {
     @Inject(SOURCE_WEIGHTS) private readonly sourceWeights: Map<string, number>,
   ) {}
 
-  async run(items: RawItem[], now: Date = this.clock.now()): Promise<void> {
+  async run(items: RawItem[], now: Date = this.clock.now()): Promise<EnrichReport> {
     const entities = await this.loadEntities();
     // Reparera teckenkodning och tolka tider före allt annat, så att triage och matchning ser rätt text.
     const problems = new Map<RawItem, string[]>();
-    const prepared = items.map((raw) => {
+    const entries = items.map((raw) => {
       const p = prepareItem(raw);
       problems.set(p.item, p.problems);
       for (const problem of p.problems) this.log.warn(`${raw.id}: ${problem}`);
-      return p.item;
+      return { raw, prepared: p.item };
     });
+
+    // Dubbletter och redan sparade poster sållas bort före triage och berikning (idempotens, krav 7).
+    const { fresh, skipped, alreadyStored } = await splitFresh(this.knex, entries);
+    await this.recordSkipped(skipped);
+    const prepared = fresh.map((e) => e.prepared);
     const triaged = await this.triage.filter(prepared);
     const candidates = triaged.kept;
     this.log.log(`${candidates.length} av ${items.length} gick vidare till berikning (${triaged.dropped.length} sållades bort, ${triaged.unscored.length} utan giltig poäng)`);
@@ -72,6 +85,7 @@ export class EnrichService {
           url: normalizeUrl(item.url),
           title: item.title,
           full_text: item.text,
+          content_hash: contentHash(item),
           summary: data.summary,
           // Allt som inte kan poängsättas eller är ogiltigt: tom arbetsyta och flaggad.
           // Fel får aldrig leda till att en artikel når fler.
@@ -86,7 +100,20 @@ export class EnrichService {
           relevance: score,
           published_at: item.published_at || null,
         })
-        .onConflict('raw_id')
+        // Sista skyddet: databasen har unika url och raw_id. Dubbletter har redan sållats bort ovan.
+        .onConflict()
+        .ignore();
+    }
+    return { skipped: skipped.map(({ raw: _raw, ...rest }) => rest), alreadyStored };
+  }
+
+  /** Sparar överhoppade poster med hela råposten, så att inget försvinner tyst. Unik per post, så en omkörning inte dubblerar loggen. */
+  private async recordSkipped(skipped: (SkippedItem & { raw: RawItem })[]): Promise<void> {
+    for (const s of skipped) {
+      this.log.warn(`Hoppade över ${s.rawId} (${s.reason})${s.existingRawId ? `, krockar med ${s.existingRawId}` : ''}: ${s.url}`);
+      await this.knex('skipped_items')
+        .insert({ raw_id: s.rawId, url: s.url, reason: s.reason, existing_raw_id: s.existingRawId ?? null, payload: JSON.stringify(s.raw) })
+        .onConflict(['raw_id', 'url', 'reason'])
         .ignore();
     }
   }
