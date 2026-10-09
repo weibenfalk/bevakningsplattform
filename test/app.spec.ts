@@ -29,8 +29,6 @@ describe('Appen startar och exporten fungerar över HTTP', () => {
       { raw_id: 'f1', spaces: ['fonsterputs'], urgency: 'info', title: 'Fönsternyhet' },
       { raw_id: 'f2', spaces: ['fonsterputs'], urgency: 'info', title: '=HYPERLINK("http://ond.example","klicka")' },
     ]);
-    // Som med `npm start`: ingen DATABASE_URL i miljön. (Testhjälparna och skripten sätter den annars åt oss.)
-    delete process.env.DATABASE_URL;
     server = await bootstrap({ port: 0, logger: false });
     base = `http://127.0.0.1:${(server.getHttpServer().address() as AddressInfo).port}`;
   });

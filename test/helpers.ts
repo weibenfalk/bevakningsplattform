@@ -8,10 +8,11 @@ import { AppModule } from '../src/app.module';
 import { KNEX } from '../src/db/knex.provider';
 import { LlmProvider } from '../src/llm/llm.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
+import { assertTestDatabase } from './test-database';
 
 /**
  * Platshållare: testhjälparna saknades i startkoden.
- * Testerna kör mot samma databas som docker-compose startar och tömmer tabellerna först.
+ * Testerna kör mot en egen databas (bevakning_test, se test-database.ts) och tömmer tabellerna först.
  */
 let app: INestApplicationContext | undefined;
 
@@ -19,6 +20,8 @@ let app: INestApplicationContext | undefined;
 afterAll(() => closeTestingApp());
 
 export async function createTestingApp(): Promise<INestApplicationContext> {
+  // Före allt annat: vi tömmer tabellerna, så vi vägrar köra mot något som inte är en testdatabas.
+  assertTestDatabase(process.env.DATABASE_URL);
   // En kvarlämnad app (t.ex. från en beforeAll) skulle annars tappa sin referens här och läcka sin pool.
   await closeTestingApp();
   const knex = db();

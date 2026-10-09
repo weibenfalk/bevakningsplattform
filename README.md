@@ -12,7 +12,7 @@ Kräver Node 22.12 eller senare och Docker.
 npm install
 npm run db:up          # startar PostgreSQL i Docker (port 5433)
 npm run migrate        # skapar tabellerna
-npm run demo           # kör pipelinen på testdatan och fyller databasen
+npm run demo           # kör pipelinen på testdatan och fyller databasen `bevakning`
 npm start              # startar servern på http://127.0.0.1:3000
 ```
 
@@ -82,10 +82,22 @@ Artiklarna flaggas då för granskning och publiceras inte, och originaltexten a
 ## Tester
 
 ```bash
-npm test                 # hela sviten (kräver databasen: npm run db:up && npm run migrate)
+npm run db:up            # Postgres måste vara igång
+npm test                 # hela sviten
 npm run test:kanda-fel   # kända fel som ännu inte är rättade (just nu inga)
 npm run typecheck
 ```
+
+**Testerna har en egen databas.** De kör mot `bevakning_test` på samma Postgres-server som demon, och `npm test`
+rör därför aldrig demodatan i `bevakning`. Testdatabasen skapas automatiskt första gången (Jest `globalSetup`, se
+`test/jest.global-setup.ts`) och tabellerna skapas av migrationerna, så ingen manuell uppsättning behövs. Du behöver
+inte köra `npm run migrate` för testerna.
+
+- Testerna tvingar sin egen `DATABASE_URL` (`test/jest.env.ts`), även om miljön pekar någon annanstans.
+- `TEST_DATABASE_URL` byter testdatabas, till exempel i CI. Namnet **måste sluta på `_test`**. Testhjälparna vägrar
+  annars köra, eftersom de tömmer tabellerna (`test/test-database.ts`).
+- Serverns `DATABASE_URL` räknas aldrig för testerna, eftersom den kan peka på en databas som inte får tömmas.
+- `npm run db:down` tar bort båda databaserna.
 
 ## Struktur
 
@@ -97,7 +109,8 @@ npm run typecheck
 | `src/llm/` | `LlmProvider`-gränssnittet och stubben |
 | `src/digest/`, `src/admin/` | Utskick och export |
 | `migrations/` | Schemat (den första migrationen är hela datamodellen) |
-| `scripts/demo.ts` | Demon |
+| `scripts/demo.ts` | Demon (databasen `bevakning`) |
+| `test/` | Tester (databasen `bevakning_test`) |
 | `data/` | Testdata: källor, användare, entiteter och råposter |
 
 ## Platshållare som saknades i startkoden

@@ -48,9 +48,10 @@ Fel 1–11 är de kända felen i `test/kanda-fel`. Tester för rättade fel har 
 | 35 | Rensningen efter 90 dagar finns inte. Specen säger att fulltext "lagras bara för bearbetning och rensas efter 90 dagar". Det gäller `articles.full_text` och `skipped_items.payload` (hela råposter, alltså råtext). Ingenting rensar någon av dem | H | kvar | saknas. Test skrivs när rensningen byggs | "Dubbletter och idempotens – den normaliserade URL:en är identiteten", under Kvarstår |
 | 36 | Ingen webbserver: startkoden saknade `main.ts`, så exporten gick inte att anropa | M | rättat | `test/app.spec.ts` (10 tester): appen startar, lyssnar på `127.0.0.1`, 401/200/403/400, admin via `ADMIN_USER_IDS`, roll i anropet räknas inte, CSV-formler neutraliseras, `parsePort`. Verifierat med curl mot `npm start` | "Webbserver och startskript (`main.ts`)" |
 | 37 | `knexProvider` fick ingen `DATABASE_URL` utanför skripten och testerna (bara `scripts/db.ts` satte ett standardvärde), så en riktig server fick 500 på varje databasanrop | H | rättat | `test/app.spec.ts` (startar utan `DATABASE_URL`, som `npm start`) och `test/database-config.spec.ts` (3 tester) | "Webbserver och startskript (`main.ts`)" |
+| 38 | Testerna och demon delade databas, så `npm test` tömde demodatan (och en felpekad `DATABASE_URL` hade kunnat få testerna att tömma riktig data) | M | rättat | `test/test-database.spec.ts` (6 tester): testerna kör mot `*_test`, `createTestingApp` vägrar en databas som inte slutar på `_test`, `DATABASE_URL` räknas aldrig för testdatabasen. Verifierat manuellt: 21 demoartiklar före och efter `npm test`, och databasen skapas från noll | "Testerna har en egen databas" |
 
 Tabellen listar felen i incidenten, de kända felen och fynden i "Fynd per fil" som har fått en egen rad. Rader utan
-test ("saknas") får sitt test först när felet tas, enligt regel 1 i `CLAUDE.md`. Fel 19–37 fortsätter numreringen,
+test ("saknas") får sitt test först när felet tas, enligt regel 1 i `CLAUDE.md`. Fel 19–38 fortsätter numreringen,
 eftersom 13–18 redan används. Inga fel är hittills medvetet bortvalda.
 
 Fynd i "Fynd per fil" som ännu **inte** har en rad i tabellen: att `ContentScopeService` saknar tillåtna listor, nekade källor och högsta brådska,

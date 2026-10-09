@@ -41,8 +41,10 @@
     "testMatch": [
       "<rootDir>/test/**/*.spec.ts"
     ],
+    "globalSetup": "<rootDir>/test/jest.global-setup.ts",
     "setupFiles": [
-      "reflect-metadata"
+      "reflect-metadata",
+      "<rootDir>/test/jest.env.ts"
     ]
   },
   "engines": {

@@ -1,4 +1,5 @@
 import { LOCAL_DATABASE_URL, resolveDatabaseUrl } from '../src/config/database';
+import { knexProvider } from '../src/db/knex.provider';
 
 describe('resolveDatabaseUrl', () => {
   it('använder DATABASE_URL när den är satt', () => {
@@ -16,5 +17,22 @@ describe('resolveDatabaseUrl', () => {
   it('kräver DATABASE_URL i produktion, så att servern aldrig tyst pratar med fel databas', () => {
     expect(() => resolveDatabaseUrl({ NODE_ENV: 'production' })).toThrow(/DATABASE_URL/);
     expect(() => resolveDatabaseUrl({ NODE_ENV: 'production', DATABASE_URL: '' })).toThrow(/DATABASE_URL/);
+  });
+});
+
+describe('knexProvider', () => {
+  it('får sin anslutning ur resolveDatabaseUrl, så att `npm start` utan DATABASE_URL når databasen', () => {
+    const old = process.env.DATABASE_URL;
+    delete process.env.DATABASE_URL;
+    try {
+      const knex = knexProvider.useFactory();
+      // Knex tolkar strängen till ett objekt.
+      expect((knex.client.config as { connection: unknown }).connection).toMatchObject({
+        host: 'localhost', port: '5433', user: 'bevakning', database: 'bevakning',
+      });
+      return knex.destroy();
+    } finally {
+      process.env.DATABASE_URL = old;
+    }
   });
 });

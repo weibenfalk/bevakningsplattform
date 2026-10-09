@@ -282,6 +282,18 @@ Det är samma princip som specen kräver för trösklarna (kalibrering mot märk
 **Kvarstår:** Riktig inloggning (fel 18). Ingen graciös nedstängning: `knexProvider` stänger inte sin pool. Bara exporten är en HTTP-väg än. Sök, arkiv, API och utskick (specens krav på omfånget "överallt") har inga endpoints.
 **Bevis:** `test/app.spec.ts` (10 tester) och `test/database-config.spec.ts` (3), plus curl mot `npm start`: 401 utan användare, 200 för Anna med bara fönsterputs, 403 när Anna anger Kalle, 200 för admin Mikael som Kalle, och 400 för `sort=(select pg_sleep(5))`.
 
+## 2026-10-09: Testerna har en egen databas
+
+**Problem:** Testerna och demon använde samma databas (`bevakning`), och testhjälparna tömmer tabellerna. `npm test` raderade därför demodatan. Det värsta fallet var värre: om `DATABASE_URL` pekade på en annan databas hade testerna tömt den.
+**Beslut:** Testerna kör mot `bevakning_test` i samma Postgres-container.
+- **Skapas automatiskt:** Jest `globalSetup` ansluter till servicedatabasen `postgres`, skapar `bevakning_test` om den saknas och ger ett tydligt fel (`Kör: npm run db:up`) om Postgres inte svarar. Tabellerna skapas av migrationerna i testhjälparna, så ingen separat uppsättning krävs.
+- **Tvingas:** `setupFiles` sätter `DATABASE_URL` till testdatabasen före varje testfil, även om miljön pekar någon annanstans.
+- **Skydd:** `createTestingApp` och globalSetup vägrar köra om databasnamnet inte slutar på `_test`. Skyddet ligger före `TRUNCATE`. `TEST_DATABASE_URL` kan byta databas (till exempel i CI) men måste följa samma namnregel.
+- **`DATABASE_URL` räknas aldrig** när testdatabasen väljs. Att härleda ett testnamn ur den (`<namn>_test`) hade kunnat skapa en databas på en server som inte är avsedd för det.
+**Alternativ:** (a) Ett annat schema i samma databas. Då delar demon och testerna fortfarande databas och anslutning, och skyddet blir svagare, eftersom det inte går att avgöra på namnet att databasen är för test. (b) En separat Docker-container för tester. Mer att starta och hålla igång för en vinst som en databas på samma server redan ger. (c) Transaktioner som rullas tillbaka efter varje test. Det kräver att all kod delar en och samma anslutning, vilket inte stämmer för appens poolade anslutningar.
+**Följdändring:** Testet som skulle återskapa `npm start` utan `DATABASE_URL` (se webbserverposten) raderade variabeln, och servern föll då tillbaka på utvecklingsdatabasen i stället för testdatabasen. Det testet är i stället ett enhetstest av att `knexProvider` får sin anslutning ur `resolveDatabaseUrl`.
+**Bevis:** Sex tester i `test/test-database.spec.ts`. Manuellt: demon gav 21 artiklar i `bevakning`, `npm test` (188 tester) lämnade dem orörda, databasen skapades från noll efter `drop database`, och med Postgres nedstängd gav `npm test` felet "Är databasen igång? Kör: npm run db:up".
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.
