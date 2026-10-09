@@ -6,6 +6,8 @@ import { Knex } from 'knex';
 import { db } from '../scripts/db';
 import { AppModule } from '../src/app.module';
 import { KNEX } from '../src/db/knex.provider';
+import { LlmProvider } from '../src/llm/llm.provider';
+import { EnrichService } from '../src/pipeline/enrich.service';
 
 /**
  * Platshållare: testhjälparna saknades i startkoden.
@@ -46,4 +48,30 @@ export async function closeTestingApp(): Promise<void> {
   await app?.get<Knex>(KNEX).destroy();
   await app?.close();
   app = undefined;
+}
+
+/**
+ * En LLM som svarar olika på triage och berikning, som en riktig modell. Triage ger varje artikel `triageScore`
+ * (standard 80), och berikningen svarar med `enrich` (objekt som JSON, eller en sträng som den är).
+ */
+export function scriptedLlm(opts: { enrich: unknown; triageScore?: number }): LlmProvider {
+  return {
+    embed: async () => [],
+    complete: async (req) => {
+      if (req.task === 'triage') {
+        const count = (req.prompt.match(/<artikel /g) ?? []).length;
+        return JSON.stringify(Array(count).fill(opts.triageScore ?? 80));
+      }
+      return typeof opts.enrich === 'string' ? opts.enrich : JSON.stringify(opts.enrich);
+    },
+  };
+}
+
+/** Byter LLM i berikningen och i triage-steget, och returnerar berikningen. */
+export function installLlm(app: INestApplicationContext, llm: LlmProvider): EnrichService {
+  const enrich = app.get(EnrichService);
+  const internals = enrich as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
+  internals.llm = llm;
+  internals.triage.llm = llm;
+  return enrich;
 }

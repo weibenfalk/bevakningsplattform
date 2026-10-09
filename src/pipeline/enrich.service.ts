@@ -9,6 +9,7 @@ import { LLM, LlmProvider } from '../llm/llm.provider';
 import { Entity, RawItem, SPACES, WatchLevel } from '../types';
 import { matchEntities } from './entity-matcher';
 import { relevance } from './score';
+import { prepareItem } from './ingest';
 import { normalizeUrl } from './normalize-url';
 import { TriageService } from './triage.service';
 
@@ -33,8 +34,17 @@ export class EnrichService {
 
   async run(items: RawItem[], now: Date = this.clock.now()): Promise<void> {
     const entities = await this.loadEntities();
-    const candidates = await this.triage.filter(items);
-    this.log.log(`${candidates.length} av ${items.length} gick vidare till berikning`);
+    // Reparera teckenkodning och tolka tider före allt annat, så att triage och matchning ser rätt text.
+    const problems = new Map<RawItem, string[]>();
+    const prepared = items.map((raw) => {
+      const p = prepareItem(raw);
+      problems.set(p.item, p.problems);
+      for (const problem of p.problems) this.log.warn(`${raw.id}: ${problem}`);
+      return p.item;
+    });
+    const triaged = await this.triage.filter(prepared);
+    const candidates = triaged.kept;
+    this.log.log(`${candidates.length} av ${items.length} gick vidare till berikning (${triaged.dropped.length} sållades bort, ${triaged.unscored.length} utan giltig poäng)`);
 
     for (const item of candidates) {
       const raw = await this.llm.complete({
@@ -54,7 +64,7 @@ export class EnrichService {
       const entityMatches = parsed.success
         ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
         : [];
-      const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success);
+      const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems.get(item) ?? []);
 
       await this.knex('articles')
         .insert({
@@ -74,7 +84,7 @@ export class EnrichService {
           impact: data.impact,
           confidence: data.confidence,
           relevance: score,
-          published_at: item.published_at,
+          published_at: item.published_at || null,
         })
         .onConflict('raw_id')
         .ignore();
@@ -92,8 +102,11 @@ export class EnrichService {
     matchedIds: string[],
     now: Date,
     valid: boolean,
+    problems: string[],
   ): { score: number | null; reviewReason: string | null } {
     if (!valid) return { score: null, reviewReason: 'Ogiltigt AI-svar (arbetsyta eller annat fält)' };
+
+    if (problems.length) return { score: null, reviewReason: problems[0] };
 
     const sourceWeight = this.sourceWeights.get(item.source);
     if (sourceWeight === undefined) return { score: null, reviewReason: `Okänd källa: ${item.source}` };

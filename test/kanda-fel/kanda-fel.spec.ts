@@ -11,7 +11,6 @@ import { LlmProvider } from '../../src/llm/llm.provider';
 import { StubProvider } from '../../src/llm/stub.provider';
 import { EnrichService } from '../../src/pipeline/enrich.service';
 import { matchEntities } from '../../src/pipeline/entity-matcher';
-import { normalizeUrl } from '../../src/pipeline/normalize-url';
 import { isSameStory } from '../../src/pipeline/similarity';
 import { closeTestingApp, createTestingApp, seedArticles, testKnex } from '../helpers';
 
@@ -35,11 +34,6 @@ describe('Behörighet (incidenten: Anna fick en konkursnyhet om takvård)', () =
 });
 
 describe('Pipeline', () => {
-  it('fel 8: alla spårningsparametrar tas bort ur URL:en (r01 och r03 är samma kungörelse)', () => {
-    expect(normalizeUrl('https://poit.example.se/kungorelse/2026-123456?utm_source=rss&utm_medium=feed'))
-      .toBe('https://poit.example.se/kungorelse/2026-123456');
-  });
-
   it('fel 10: alias med svensk böjning matchar (Takvårdarnas)', () => {
     const tv = { id: 'e2', name: 'Takvårdarna', watchLevel: 'high' as const,
       aliases: ['Takvårdarna'], domains: ['takvardarna.se'] };

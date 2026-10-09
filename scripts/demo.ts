@@ -12,7 +12,8 @@ import { NestFactory } from '@nestjs/core';
 import { db } from './db';
 import { AppModule } from '../src/app.module';
 import { ArticleAccessService } from '../src/access/article-access.service';
-import { renderDigest } from '../src/digest/render';
+import { pipelineConfig } from '../src/config/pipeline.config';
+import { DigestService } from '../src/digest/digest.service';
 import { EntityImportService } from '../src/import/entity-import.service';
 import { LLM, LlmProvider } from '../src/llm/llm.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
@@ -84,8 +85,15 @@ async function main() {
       console.log(`     ⚠ ${r.raw_id}  ${(r.title || '(ingen rubrik)').slice(0, 50).padEnd(50)} [${why}]`);
     }
 
+    // Det riktiga utskicket: DigestService med tröskel, sortering på brådska och andra källor.
+    const html = await app.get(DigestService).compose(user.id);
+    const sent = rows
+      .filter((r) => (r.relevance ?? 0) >= pipelineConfig.digest.threshold)
+      .sort((a, b) => (a.raw_id < b.raw_id ? -1 : 1));
     const file = `out/${user.id}.html`;
-    writeFileSync(file, page(user.name, renderDigest(rows.map((r) => ({ ...r, otherSources: [] })))));
+    writeFileSync(file, page(user.name, html));
+    console.log(`   Utskicket innehåller ${(html.match(/<tr>/g) ?? []).length} artiklar (tröskel ${pipelineConfig.digest.threshold}): ` +
+      `${sent.map((r) => `${r.raw_id}(${r.relevance})`).join(', ') || 'inga'}`);
     console.log(`   Förhandsvisning av mejlet: ${file}`);
   }
 
@@ -97,8 +105,8 @@ async function main() {
   }
 
   console.log(
-    '\nObs: förhandsvisningen hoppar över utskickets tröskel och visar alla artiklar. Entitetsträffar missar\n' +
-      'fortfarande böjningar (fel 10), så entitetsvikten är ofullständig.\n',
+    '\nObs: stubben (AI-ersättaren) sätter arbetsyta och påverkan efter nyckelord, så poängen visar flödet och är\n' +
+      'ingen bedömning. Entitetsträffar missar fortfarande böjningar (fel 10).\n',
   );
 
   await app.close();

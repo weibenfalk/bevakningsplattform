@@ -2,10 +2,10 @@ import { INestApplicationContext } from '@nestjs/common';
 import { ArticleAccessService } from '../src/access/article-access.service';
 import { EnrichmentSchema, CATEGORIES } from '../src/llm/enrichment.schema';
 import { LlmProvider } from '../src/llm/llm.provider';
-import { stubBusinessAreas } from '../src/llm/stub.provider';
+import { StubProvider, stubBusinessAreas, stubImpact } from '../src/llm/stub.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
 import { DigestService } from '../src/digest/digest.service';
-import { closeTestingApp, createTestingApp, testKnex } from './helpers';
+import { closeTestingApp, createTestingApp, installLlm, scriptedLlm, testKnex } from './helpers';
 
 const item = {
   id: 'r01',
@@ -41,16 +41,9 @@ describe('Kategori från berikningen', () => {
 
     it('ett AI-svar utan giltig arbetsyta publiceras inte, utan sparas flaggad för granskning', async () => {
       for (const business_areas of [[], ['påhittad']]) {
-        const llm: LlmProvider = {
-          embed: async () => [],
-          complete: async () => JSON.stringify({
-            summary: 's', business_areas, categories: ['konkurrent'], urgency: 'info', impact: 10, confidence: 0.9,
-          }),
-        };
-        const enrich = app.get(EnrichService);
-        const internals = enrich as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
-        internals.llm = llm;
-        internals.triage.llm = llm;
+        const enrich = installLlm(app, scriptedLlm({ enrich: {
+          summary: 's', business_areas, categories: ['konkurrent'], urgency: 'info', impact: 10, confidence: 0.9,
+        } }));
         await testKnex()('articles').where({ raw_id: 'r01' }).delete();
         await enrich.run([item]);
 
@@ -65,11 +58,8 @@ describe('Kategori från berikningen', () => {
     });
 
     it('när AI:n svarar fel sparas ingen sammanfattning (inte originaltexten) och artikeln flaggas', async () => {
-      const broken: LlmProvider = { embed: async () => [], complete: async () => 'inte JSON' };
-      const enrich = app.get(EnrichService);
-      const internals = enrich as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
-      internals.llm = broken;
-      internals.triage.llm = broken;
+      // Triage fungerar, men berikningen svarar med något ogiltigt.
+      const enrich = installLlm(app, scriptedLlm({ enrich: 'inte JSON' }));
       await enrich.run([item]);
       const row = await testKnex()('articles').where({ raw_id: 'r01' }).first();
       expect(row?.summary).toBeNull();
@@ -77,14 +67,7 @@ describe('Kategori från berikningen', () => {
     });
 
     it('sparar kategorin på artikeln', async () => {
-      const llm: LlmProvider = {
-        embed: async () => [],
-        complete: async () => JSON.stringify(enrichment({ categories: ['konkurrent'] })),
-      };
-      const enrich = app.get(EnrichService) as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
-      enrich.llm = llm;
-      enrich.triage.llm = llm;
-      await app.get(EnrichService).run([item]);
+      await installLlm(app, scriptedLlm({ enrich: enrichment({ categories: ['konkurrent'] }) })).run([item]);
       const row = await testKnex()('articles').where({ raw_id: 'r01' }).first();
       expect(row?.categories).toEqual(['konkurrent']);
     });
@@ -110,19 +93,10 @@ describe('Relevans kopplad till pipelinen', () => {
   beforeEach(async () => { app = await createTestingApp(); });
   afterEach(closeTestingApp);
 
-  const llmWith = (extra: Record<string, unknown>): LlmProvider => ({
-    embed: async () => [],
-    complete: async () => JSON.stringify({
-      summary: 's', business_areas: ['takvard'], categories: ['konkurrent'], urgency: 'info', impact: 80, confidence: 0.9, ...extra,
-    }),
-  });
-  const useLlm = (llm: LlmProvider) => {
-    const enrich = app.get(EnrichService);
-    const internals = enrich as unknown as { llm: LlmProvider; triage: { llm: LlmProvider } };
-    internals.llm = llm;
-    internals.triage.llm = llm;
-    return enrich;
-  };
+  const llmWith = (extra: Record<string, unknown>): LlmProvider => scriptedLlm({ enrich: {
+    summary: 's', business_areas: ['takvard'], categories: ['konkurrent'], urgency: 'info', impact: 80, confidence: 0.9, ...extra,
+  } });
+  const useLlm = (llm: LlmProvider) => installLlm(app, llm);
   const row = () => testKnex()('articles').where({ raw_id: 'r01' }).first();
   const NOW = new Date('2026-10-01T07:00:00+02:00');
 
@@ -174,6 +148,64 @@ describe('Relevans kopplad till pipelinen', () => {
     expect(saved.needs_review).toBe(true);
     expect(saved.spaces).toEqual([]);
     expect(saved.relevance).toBeNull();
+  });
+});
+
+describe('Triage i pipelinen', () => {
+  let app: INestApplicationContext;
+  beforeEach(async () => { app = await createTestingApp(); });
+  afterEach(closeTestingApp);
+
+  const answer = { summary: 's', business_areas: ['takvard'], categories: ['konkurrent'], urgency: 'info', impact: 80, confidence: 0.9 };
+  const NOW = new Date('2026-10-01T07:00:00+02:00');
+  const count = () => testKnex()('articles').count<{ count: string }>('* as count').first().then((r) => Number(r?.count));
+
+  it('ett ogiltigt triage-svar ger inga berikningar (tidigare släpptes allt igenom)', async () => {
+    let enrichCalls = 0;
+    const llm: LlmProvider = {
+      embed: async () => [],
+      complete: async (req) => {
+        if (req.task === 'enrich') { enrichCalls++; return JSON.stringify(answer); }
+        return 'Tyvärr, jag kan inte hjälpa till med det.';
+      },
+    };
+    await installLlm(app, llm).run([item], NOW);
+    expect(enrichCalls).toBe(0);
+    expect(await count()).toBe(0);
+  });
+
+  it('en låg poäng sållas bort artikeln utan att den dyra berikningen anropas', async () => {
+    let enrichCalls = 0;
+    const base = scriptedLlm({ enrich: answer, triageScore: 5 });
+    const llm: LlmProvider = { ...base, complete: async (req) => { if (req.task === 'enrich') enrichCalls++; return base.complete(req); } };
+    await installLlm(app, llm).run([item], NOW);
+    expect(enrichCalls).toBe(0);
+    expect(await count()).toBe(0);
+  });
+});
+
+describe('Stubben: påverkan efter nyckelord (gäller bara stubben)', () => {
+  it.each([
+    ['Växjö tingsrätt har beslutat om konkurs för Takvårdarna'],
+    ['Rotavdraget sänks från 30 till 20 procent'],
+    ['Arbetsmiljöverket inleder tillsyn mot taksäkerhet'],
+    ['Koncernen planerar börsnotering under 2027'],
+    ['KONKURSEN är ett faktum'],
+  ])('hög påverkan: %s', (text) => {
+    expect(stubImpact(text)).toBeGreaterThanOrEqual(80);
+  });
+
+  it('övrigt ger 50', () => {
+    expect(stubImpact('Mina bästa städtips')).toBe(50);
+    expect(stubImpact('')).toBe(50);
+  });
+
+  it('stubbens berikningssvar använder den, och arbetsyta och påverkan sätts oberoende av varandra', async () => {
+    const answer = JSON.parse(await new StubProvider().complete({
+      task: 'enrich', system: '', prompt: '<artikel>\nKonkurs\n\nTakvårdarna går i konkurs\n</artikel>',
+    }));
+    expect(answer.impact).toBeGreaterThanOrEqual(80);
+    expect(answer.business_areas).toEqual(['takvard']);
   });
 });
 

@@ -157,6 +157,49 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 **Kvarstår:** Själva tröskeln (55) är gissad och inte kalibrerad (se "Medvetet bortvalt"). Åtkomstmodulens `limit` på 100 gäller före urvalet.
 **Bevis:** Två av tre tester i `test/digest.spec.ts` ("urval") var röda och blev gröna. Det tredje skyddar ordningen inom samma brådska.
 
+## 2026-10-09: Fel 8 – alla spårningsparametrar tas bort ur URL:en
+
+**Problem:** `normalizeUrl` tog bort parametrar medan den itererade över `searchParams`. Då hoppas varannan parameter över, så `?utm_source=rss&utm_medium=feed` blev `?utm_medium=feed` och r03 räknades inte som samma kungörelse som r01.
+**Beslut:** Nycklarna samlas först och tas bort efteråt. Mönstret är utökat med vanliga klick-id:n (`dclid`, `msclkid`, `yclid`, `igshid`, `mc_cid`, `mc_eid`, `_hsenc`, `_hsmi`) och är skiftlägesokänsligt. Namn som bara *börjar* som ett klick-id (till exempel `gclidx`) tas inte bort längre, bara `utm_`-prefixet är ett prefix. Övriga parametrar bevaras i sin ordning, och en tom frågesträng lämnas inte kvar.
+**Alternativ:** Svartlista bara `utm_`. Det missar klick-id:n. Att ta bort alla parametrar skulle däremot förstöra länkar där innehållet beror på en parameter (`?id=5`).
+**Kvarstår:** Listan är inte uttömmande. En ogiltig adress får `new URL` att kasta ett fel och stoppa körningen. Deduplicering av r01/d01 (samma URL) hör till klusterlogiken, som inte är byggd.
+**Bevis:** Två av sex tester i `test/normalize-url.spec.ts` var röda och blev gröna.
+
+## 2026-10-09: Teckenkodning och tidszoner vid inläsning
+
+**Beslut:** Ett nytt förberedelsesteg (`src/pipeline/ingest.ts`) körs på varje råpost före triage, så att triage, entitetsmatchning och poäng ser rätt text och tid.
+- **Teckenkodning (r20):** Text som innehåller `Ã` eller `Â` tolkas som UTF-8 lästa som Latin-1/Windows-1252 och avkodas om (`FÃ¶nster` → `Fönster`). Reparationen gäller bara om det blir giltig UTF-8. Korrekt text lämnas orörd. Text som ser felkodad ut men inte går att reparera flaggas för granskning (`Misstänkt felkodad text`) i stället för att publiceras som den är.
+- **Tidszon (r21):** Tid utan tidszon tolkas som Europe/Stockholm (antagande i `CLAUDE.md`) och lagras som UTC. Tid med tidszon (`Z`, `±hh:mm`) behåller sin. Det görs med `Intl` utan nytt beroende.
+- **Ogiltigt datum:** Det kraschar inte längre infogningen. Artikeln sparas med `published_at = null`, flaggas för granskning (`Ogiltigt datum: …`) och publiceras inte.
+**Alternativ:** (a) Reparera i `csv`/JSON-inläsningen. Det finns ingen sådan inläsning, eftersom råposterna kommer in som objekt, så rätt plats är före pipelinen. (b) Ett beroende som `luxon` eller `date-fns-tz` för tidszoner. Det är mer yta, och `Intl` räcker. (c) Anta UTC för tid utan zon. Det är fel för ett svenskt flöde och ger fel dygn (r21 hamnade två timmar fel).
+**Känd begränsning:** En lokal tid som inte finns (klockan hoppar framåt vid sommartidens start) eller som inträffar två gånger (när den slutar) får en av de två möjliga tolkningarna. Det är ovanligt i nyhetsflöden men finns. Reparationen känner bara igen UTF-8 som lästs som Latin-1 eller Windows-1252, inte andra kodningar.
+**Bevis:** 22 tester i `test/ingest.spec.ts`. De var röda eftersom modulen saknades och är nu gröna. Bland dem testas r20 och r21 genom hela berikningen.
+
+## 2026-10-09: Triage – ett ogiltigt svar släpper inte igenom något
+
+**Problem:** `minScore` var 0 och ett fel gav poängen 0, så `0 >= 0` släppte igenom allt, vid trasigt svar och vid varje svar. Specen siktar på att cirka 700 råposter ska ge cirka 200 kandidater, men triage gallrade ingenting. Det blev 700 dyra berikningar i stället för cirka 35. Svaret parsades med `JSON.parse` (inte `extractJson`), och artikeltexten låg oavgränsad i prompten.
+**Beslut:**
+- `filter` returnerar `{ kept, dropped, unscored }`. En artikel utan giltig poäng hamnar i `unscored` och går **inte** vidare, och det loggas med id. Ett helt ogiltigt svar (inte JSON, inte en lista, fel längd) ger `unscored` för hela omgången. Enstaka ogiltiga poster i en giltig lista påverkar bara sig själva.
+- En giltig poäng är ett ändligt tal mellan 0 och 100. Strängar (`"90"`), `null`, `NaN` och tal utanför intervallet är ogiltiga.
+- Tröskeln är 40 (`TRIAGE_MIN_SCORE`). Den är **gissad och inte kalibrerad**. Ett tomt eller icke-numeriskt värde i miljön ger standardvärdet i stället för 0 (`Number('')` är 0 och skulle åter släppa igenom allt).
+- Svaret parsas med `extractJson`. Artiklarna avgränsas som `<artikel nr="…">`, systemprompten säger att texten är data, och avgränsarna tas bort ur titel och text så att texten inte kan stänga avgränsningen (se r19).
+- Stubben svarar triage med 50 för varje artikel. Den kan inte bedöma relevans, och 50 är över tröskeln, så demon visar flödet. Det gäller bara stubben.
+**Alternativ:** (a) Låta ogiltiga artiklar gå vidare till berikning "för säkerhets skull". Det är exakt buggen: ett fel blir ett beslut. (b) Släppa dem tyst. Då försvinner nyheter utan spår. Därför loggas de, men de **försöks inte om**. Omförsök hör till AI-routern, som är medvetet bortvald. (c) Kasta ett fel och stoppa körningen. En dålig omgång ska inte stoppa resten.
+**Kvarstår:** Tröskeln är inte kalibrerad. Ingen omrankning mot profiler finns (specens mellansteg, bortvalt). Artiklar utan giltig poäng försöks inte om automatiskt. Berikningens prompt avgränsar fortfarande artikeltexten utan att neutralisera avgränsaren (samma svaghet som triage hade).
+**Bevis:** 16 tester i `test/triage.spec.ts` och två i `test/enrich.spec.ts` för pipelinen, plus `test/pipeline-config.spec.ts`. Elva äldre tester som lät samma falska AI svara på både triage och berikning fick `scriptedLlm` i `test/helpers.ts` (en AI som svarar olika per steg, som en riktig). Det var testunderlaget som ändrades och inget beteende.
+
+## 2026-10-09: Stubben sätter påverkan efter nyckelord (gäller bara stubben)
+
+**Beslut:** `StubProvider` sätter `impact` efter nyckelord, på samma sätt som arbetsytan: `konkurs`, `rotavdrag`, `arbetsmiljöverket` och `börsnotering` (som ordbörjan, utan hänsyn till skiftläge) ger 85, och allt annat 50. Demon använder dessutom den riktiga `DigestService` för förhandsvisningen (tröskel, sortering på brådska, andra källor), så att den visar ett utskick som ser ut som ett riktigt.
+**Gäller bara stubben.** Det är en testersättare för modellen, och ingen bedömning och inget beteende i produktionskoden. Riktig påverkan sätts av modellen (0–100). Nyckelorden är valda för att demon ska bli begriplig och bör inte tolkas som en affärsregel. Stubbens triage ger 50 till allt av samma skäl.
+**Alternativ:** (a) Behålla 50 för alla. Då hamnar nästan allt vid tröskeln och utskicket blir platt. (b) Slumpad påverkan. Då går varken demon eller testerna att upprepa.
+**Vad demon visar nu (stubben, dag 1):** Kalle får 11 artiklar, Anna 5 och Mikael 17. Börsnoteringen (r11) når bara koncernledningen. r20 (efter reparerad teckenkodning) når Anna, r10, r14, r15 och r21 flaggas och når ingen.
+**Det demon fortfarande avslöjar (kända problem, inte rättade här):**
+- **r08** ("Mina bästa städtips", brus) når Anna och Mikael med poängen 65. Stubben ger den fönsterputs på ordet "fönster", och entitetsmatcharen träffar dessutom det egna varumärket Rena Fönster på "rena fönster" (falsk träff på vanliga ord, hör till fel 10:s omskrivning av matcharen). Entiteten väger 100.
+- **r19** (promptinjektion och ett obekräftat rykte om konkurs) får poängen 79 och hamnar högt för Kalle, eftersom ordet "konkurs" ger hög påverkan. Det är precis risken som "verifiering av akutlarm mot en andra källa" (medvetet bortvalt) ska hantera.
+- **r06** får bara fonsterputs, fast vår bedömning är takvård och fonsterputs. Det är stubbens nyckelord.
+**Bevis:** Sju tester i `test/enrich.spec.ts` ("Stubben: påverkan efter nyckelord").
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.
