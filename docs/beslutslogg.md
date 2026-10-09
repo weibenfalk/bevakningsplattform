@@ -260,6 +260,17 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 - En post som hoppas över som `duplicate` ger ingen ny källa i "Även:" under den första artikeln. Först med klustringen kan olika källor till samma story visas där.
 **Bevis:** 12 tester i `test/dedupe.spec.ts`, alla med de riktiga posterna ur `data/`: r01/r03/d01 (dubbletter, båda ordningarna, en gång i utskicket, unikhet i databasen), omkörning (inga nya artiklar, loggrader eller AI-anrop), d02 (ändrat innehåll), r09 (kollision, även över två körningar), ogiltig URL och `utm_`/versaler/fragment.
 
+## 2026-10-09: AI-leverantör
+
+**Beslut:** Ingen riktig leverantör är inkopplad. Allt körs med stubben, enligt kraven. Vid val av leverantör är krav på databehandling inom EU och kostnad per anrop avgörande. Ett billigt alternativ för triagen och ett dyrare för berikningen, med en reservmodell från en annan leverantör.
+**Hur en leverantör kopplas in:** Gränssnittet `LlmProvider` gör att en riktig leverantör kan kopplas in som en ny fil, utan att resten av koden ändras. Koden skiljer redan på triage och berikning (`task: 'triage'` respektive `'enrich'`), så olika modeller per steg kräver bara att leverantören väljer modell efter `task`.
+**Hur leverantören väljs:**
+> Jag skulle inte välja utifrån känsla. Jag skulle ta ett märkt testset med ett hundratal artiklar där vi vet rätt svar, och köra två eller tre kandidater mot det. Sedan mäter jag andelen korrekta bedömningar, falska träffar, giltiga svar och kostnad per utskick. Den som klarar kraven billigast vinner. Eftersom modellvalet ligger i konfiguration går det att byta senare.
+
+Det är samma princip som specen kräver för trösklarna (kalibrering mot märkt data, aldrig gissning), och samma märkta data kan användas till båda. "Giltiga svar" mäts mot de scheman som redan finns (`EnrichmentSchema` och triagens poängintervall), så andelen giltiga svar går att räkna ut direkt.
+**Obs:** Att modellvalet ligger i konfiguration gäller först när routern är byggd. I dag väljer `AppModule` leverantör (`{ provide: LLM, useClass: StubProvider }`), så ett byte är en ändring där och inte en inställning.
+**Kvarstår:** Routern med modellval i konfiguration, reservmodell, omförsök, budgettak och kostnadsräkning är medvetet bortvald (se `CLAUDE.md`) och dokumenteras som nästa steg i `ÖVERLÄMNING.md`. Detsamma gäller embeddings och kalibrering av trösklar, som hänger på vilken modell som väljs (se fel 11).
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.
