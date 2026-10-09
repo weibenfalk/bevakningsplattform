@@ -1,4 +1,5 @@
 import { INestApplicationContext } from '@nestjs/common';
+import { pipelineConfig } from '../src/config/pipeline.config';
 import { DigestService } from '../src/digest/digest.service';
 import { closeTestingApp, createTestingApp, seedArticles, testKnex } from './helpers';
 
@@ -47,3 +48,47 @@ describe('DigestService: andra källor', () => {
     expect(html).not.toContain('Egen källa</a>');
   });
 });
+
+describe('DigestService: urval', () => {
+  let app: INestApplicationContext;
+  beforeEach(async () => { app = await createTestingApp(); });
+  afterEach(closeTestingApp);
+
+  const { threshold, maxItems } = pipelineConfig.digest;
+  const rows = (html: string) => (html.match(/<tr>/g) ?? []).length;
+
+  it('en artikel med exakt tröskelvärdet tas med, och en under den gör det inte', async () => {
+    await seedArticles([
+      { raw_id: 'p1', spaces: ['takvard'], urgency: 'info', relevance: threshold },
+      { raw_id: 'p2', spaces: ['takvard'], urgency: 'info', relevance: threshold - 1 },
+    ]);
+    const html = await app.get(DigestService).compose('u-kalle');
+    expect(html).toContain('Artikel p1');
+    expect(html).not.toContain('Artikel p2');
+  });
+
+  it('sorterar före begränsningen: en akut artikel med lägre poäng tränger inte ut av mer relevanta', async () => {
+    await seedArticles([
+      ...Array.from({ length: maxItems }, (_, i) => ({
+        raw_id: `i${String(i + 1).padStart(2, '0')}`, spaces: ['takvard'], urgency: 'info', relevance: 90 - i,
+      })),
+      { raw_id: 'akut1', spaces: ['takvard'], urgency: 'akut', relevance: threshold + 5 },
+    ]);
+    const html = await app.get(DigestService).compose('u-kalle');
+    expect(rows(html)).toBe(maxItems);
+    expect(html).toContain('Artikel akut1');
+    expect(html.indexOf('Artikel akut1')).toBeLessThan(html.indexOf('Artikel i01'));
+    // Den som faller bort är den minst brådskande och minst relevanta.
+    expect(html).not.toContain(`Artikel i${maxItems}`);
+  });
+
+  it('inom samma brådska kommer den mest relevanta först', async () => {
+    await seedArticles([
+      { raw_id: 'l1', spaces: ['takvard'], urgency: 'agera', relevance: 60 },
+      { raw_id: 'h1', spaces: ['takvard'], urgency: 'agera', relevance: 80 },
+    ]);
+    const html = await app.get(DigestService).compose('u-kalle');
+    expect(html.indexOf('Artikel h1')).toBeLessThan(html.indexOf('Artikel l1'));
+  });
+});
+

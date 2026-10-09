@@ -23,7 +23,6 @@ export async function up(knex: Knex): Promise<void> {
       org_number    text,
       domains       text[] NOT NULL DEFAULT '{}',
       aliases       text[] NOT NULL DEFAULT '{}',
-      ceo_name      text,
       meta_page_id  text,
       notes         text
     );

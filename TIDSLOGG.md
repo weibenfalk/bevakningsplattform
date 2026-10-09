@@ -2,7 +2,7 @@
 
 30 minuter
 
-# Fel 1-7 och 12 som uppkom
+# Felrättningar
 
-60 minuter
+90 minuter
 

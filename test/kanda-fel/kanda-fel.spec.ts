@@ -40,12 +40,6 @@ describe('Pipeline', () => {
       .toBe('https://poit.example.se/kungorelse/2026-123456');
   });
 
-  it('fel 9: en entitet utan domän matchar inte varje text', () => {
-    const klartGlas = { id: 'e5', name: 'Klart Glas Kalmar', watchLevel: 'high' as const,
-      aliases: ['Klart Glas'], domains: [''] };
-    expect(matchEntities('Rekordpumpa i Nybro', [klartGlas])).toEqual([]);
-  });
-
   it('fel 10: alias med svensk böjning matchar (Takvårdarnas)', () => {
     const tv = { id: 'e2', name: 'Takvårdarna', watchLevel: 'high' as const,
       aliases: ['Takvårdarna'], domains: ['takvardarna.se'] };

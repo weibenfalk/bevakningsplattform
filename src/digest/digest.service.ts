@@ -13,12 +13,14 @@ export class DigestService {
     const { threshold, maxItems } = pipelineConfig.digest;
     const articles = await this.access.forUser(userId);
 
+    // Filtrera, sortera på brådska och därefter relevans, och begränsa sist. Annars tränger mer relevanta
+    // artiklar ut en akut artikel med lägre poäng.
     const selected = articles
-      .filter((a) => (a.relevance ?? 0) > threshold)
-      .slice(0, maxItems)
+      .filter((a) => (a.relevance ?? 0) >= threshold)
       .sort((a, b) => URGENCY_ORDER[a.urgency as keyof typeof URGENCY_ORDER]
         - URGENCY_ORDER[b.urgency as keyof typeof URGENCY_ORDER]
-        || (b.relevance ?? 0) - (a.relevance ?? 0));
+        || (b.relevance ?? 0) - (a.relevance ?? 0))
+      .slice(0, maxItems);
 
     const clusterIds = [...new Set(selected.flatMap((a) => (a.cluster_id ? [a.cluster_id] : [])))];
     const sources = await this.access.sourcesByCluster(userId, clusterIds);

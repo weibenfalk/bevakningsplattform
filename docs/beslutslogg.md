@@ -129,6 +129,34 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 - r21 saknar tidszon (fel 24), och `Date.parse` tolkar den då efter datorns tidszon.
 **Bevis:** Nytt `test/score.spec.ts` (högst viktade entiteten, NaN, källvikt, färskhet) och fem tester i `test/enrich.spec.ts` (sparad relevans och icke-tomt utskick, källvikt, fast klocka, entitetsvikt med `entity_ids`, okänd källa). Alla var röda och är gröna.
 
+## 2026-10-09: Fel 9 – tomma termer matchar inget
+
+**Beslut:** `matchEntities` hoppar över alias och domäner som är tomma eller bara består av blanksteg. En tom term gav mönstret `\b\b`, som matchar all text. Därför fick varje artikel Klart Glas och Rena Fönster som entitet, med falsk entitetsvikt och falska `entity_ids` som följd (se "relevance räknas ut").
+**Alternativ:** (a) Rensa bort tomma termer bara i entitetsimporten. Det behövs också (nästa steg), men matcharen får inte lita på att datan är ren, eftersom datan kan komma från andra vägar. (b) Kasta fel vid en tom term. Då stoppas hela matchningen för en dålig rad.
+**Kvarstår:** Fel 10 (böjningar) och falska träffar på vanliga ord ("klart glas", "rena fönster") är inte rättade. De hör till en omskrivning av matcharen.
+**Bevis:** Tre av fyra tester i `test/entity-matcher.spec.ts` var röda och blev gröna. Det fjärde skyddar att riktiga termer matchar.
+
+## 2026-10-09: Entitetsimporten – validerad, ihopslagen och utan personuppgifter
+
+**Beslut:** `EntityImportService.importCsv` returnerar en rapport (`imported`, `merged`, `rejected`, `mappings`) i stället för ett tal, och loggar allt som avvisas eller mappas.
+- **Avvisas:** tomt namn, EXEMPEL-rader (namn som börjar med "EXEMPEL" eller anteckning "Exempelrad"), okänd bevakningsnivå, okänt affärsområde (mot `SPACES`) och okänd typ. Varje avvisad rad rapporteras med radnummer och orsak. Ingen rad försvinner tyst.
+- **Mappas:** "Hög" (och kritisk/normal/låg) till `high` (och `critical`/`normal`/`low`). Varje mappning loggas med radnummer. Allt annat avvisas. Jag valde en liten fast mappning i stället för en gissning.
+- **Trimning och dubbletter:** namn och termer trimmas. Rader med samma namn (utan hänsyn till skiftläge) slås ihop, och alias och domäner läggs ihop utan att något tappas. Mot databasen slås alias och domäner ihop med det som redan finns (inget skrivs över), och övriga fält uppdateras bara när den nya raden har ett värde.
+- **Tomma termer** rensas bort, så att de inte når matcharen (se fel 9).
+- **`meta_page_id` och `org_number` som text.** `cast` är avstängt. Id:t 9007199254740993 är större än `Number.MAX_SAFE_INTEGER` och blev tidigare ett avrundat tal.
+- **Vd-namn lagras inte.** Kolumnen `ceo_name` är borttagen ur första migrationen (datasparsamhet: personuppgifter som systemet inte behöver, och som inte ska ligga i en databas utan skäl). Lokala databasen återskapades.
+**Alternativ:** (a) Behålla kolumnen men lämna den tom. Då ligger risken kvar att någon fyller den. (b) Avvisa hela filen vid första felet. Då stoppar en dålig rad allt, och användaren får inte veta om resten. (c) Gissa en nivå för okända värden. Samma mönster som i fel 4.
+**Kvarstår:** Organisationsnummer har olika format (556987-6543 mot 5564561234) och normaliseras inte. Typen `own_brand` styr ännu ingenting i pipelinen. `entities.id` är ett heltal men `entity_ids` på artiklar är text.
+**Bevis:** Elva tester i `test/entity-import.spec.ts`, bland annat mot hela `data/entiteter.csv`: sju entiteter, två avvisade rader (rad 2 och 7), en ihopslagen dubblett och en mappning (rad 6).
+
+## 2026-10-09: Utskicket – tröskel `>=` och sortering före begränsning
+
+**Beslut:** `DigestService` tar med artiklar med relevans `>= 55` (tröskeln i `pipelineConfig`). Urvalet filtrerar, sorterar på brådska (akut först) och därefter relevans, och begränsar till `maxItems` sist.
+**Varför:** Med `>` föll en artikel med exakt 55 bort, och stubbens standardpoäng blev just 55. Med `slice` före `sort` valde koden de 18 mest relevanta och sorterade dem sedan. En akut artikel med lägre poäng kunde alltså aldrig komma med, trots att brådskan styr ordningen i mejlet.
+**Alternativ:** Behålla `>` som en medveten avgränsning. Det finns ingen sådan motivering i koden eller specen, och det var inte avsikten.
+**Kvarstår:** Själva tröskeln (55) är gissad och inte kalibrerad (se "Medvetet bortvalt"). Åtkomstmodulens `limit` på 100 gäller före urvalet.
+**Bevis:** Två av tre tester i `test/digest.spec.ts` ("urval") var röda och blev gröna. Det tredje skyddar ordningen inom samma brådska.
+
 ## AI-logg
 
 - **2026-10-09, AI hade fel:** AI-verktyget skrev `package.json` med versioner ur minnet, och flera låg en till två huvudversioner efter. Upptäcktes vid installationen, och versionerna kontrollerades med `npm outdated`. Lärdom: kontrollera alltid versioner mot registret, lita inte på AI:ns minne.

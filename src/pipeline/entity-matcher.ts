@@ -7,6 +7,8 @@ export function matchEntities(text: string, entities: Entity[]): EntityMatch[] {
 
   for (const entity of entities) {
     for (const term of [...entity.aliases, ...entity.domains]) {
+      // En tom term ger mönstret \b\b, som matchar all text. Hoppa över den.
+      if (term.trim() === '') continue;
       const pattern = new RegExp(`\\b${escapeRegExp(term)}\\b`, 'i');
       const hit = pattern.exec(text);
       if (!hit) continue;

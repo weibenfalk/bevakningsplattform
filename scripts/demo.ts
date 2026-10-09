@@ -57,7 +57,10 @@ async function main() {
   }
 
   console.log('\n== 1. Importerar entitetsregistret (data/entiteter.csv)');
-  await app.get(EntityImportService).importCsv('data/entiteter.csv');
+  const report = await app.get(EntityImportService).importCsv('data/entiteter.csv');
+  console.log(`   ${report.imported} importerade, ${report.merged} dubbletter ihopslagna, ${report.rejected.length} avvisade`);
+  for (const r of report.rejected) console.log(`   avvisad rad ${r.line} (${r.name || 'utan namn'}): ${r.reason}`);
+  for (const m of report.mappings) console.log(`   mappad rad ${m.line} (${m.name}): "${m.from}" -> "${m.to}"`);
   const entities = await knex('entities').select('name', 'watch_level', 'domains').orderBy('id');
   for (const e of entities) console.log(`   "${e.name}"  nivå=${e.watch_level}  domäner=${JSON.stringify(e.domains)}`);
 
@@ -94,8 +97,8 @@ async function main() {
   }
 
   console.log(
-    '\nObs: relevansen räknas nu ut i berikningen, men entitetsvikten är missvisande så länge fel 9 (tom domän\n' +
-      'matchar all text) är kvar. Förhandsvisningen hoppar över utskickets tröskel och visar alla artiklar.\n',
+    '\nObs: förhandsvisningen hoppar över utskickets tröskel och visar alla artiklar. Entitetsträffar missar\n' +
+      'fortfarande böjningar (fel 10), så entitetsvikten är ofullständig.\n',
   );
 
   await app.close();
