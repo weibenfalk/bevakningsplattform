@@ -1,0 +1,11 @@
+name,type,business_area,watch_level,org_number,hq_city,domains,aliases,ceo_name,meta_page_id,notes
+EXEMPEL Taktvätt Syd AB,competitor,takvard,high,556123-4567,Växjö,taktvattsyd.se,Taktvätt Syd|Taktvättsyd,Anna Andersson,102938475610293,Exempelrad - ta bort
+Takvårdarna Småland AB,competitor,takvard,high,556701-2233,Växjö,takvardarna.se,Takvårdarna|Takvardarna|Takvårdarna i Småland,Lena Holm,9007199254740993,Växer snabbt i Kalmar län
+Rikstak Sverige AB,competitor,takvard,critical,556987-6543,Stockholm,rikstak.se,Rikstak|Riks Tak,Erik Eriksson,209384756102938,"Störst i landet, bevaka priser"
+Blanka Fönster AB,competitor,fonsterputs,normal,5564561234,Kalmar,blankafonster.se,Blanka Fönster|Blanka Fonster,,,Lokal aktör
+Klart Glas Kalmar,competitor,fonsterputs,Hög,,Kalmar,,Klart Glas,,,
+,competitor,takvard,normal,,,,,,,
+Rikstak Sverige AB ,competitor,takvard,critical,556987-6543,Stockholm,rikstak.se,Rikstak,,,
+Takteam i Sverige,own_brand,takvard,critical,,Kalmar,takteam.se,Takteam|Tak Team,,,Eget varumärke
+Rena Fönster,own_brand,fonsterputs,critical,,Kalmar,,Rena Fönster|Rena Fonster,,,Eget varumärke
+Husfixarna,own_brand,takvard,critical,,Kalmar,husfixarna.se,Husfixarna|Husfixaren,,,Eget varumärke

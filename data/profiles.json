@@ -1,0 +1,8 @@
+[
+  { "id": "pf-konkurrenter-tak", "user": "u-kalle", "query": "(Rikstak OR Takvårdarna OR \"Taktvätt Syd\") AND NOT pumpa*" },
+  { "id": "pf-tak-pris", "user": "u-kalle", "query": "(Rikstak AND (takmålning OR taktvätt)" },
+  { "id": "pf-regler", "user": "u-mikael", "query": "(rotavdrag* OR rutavdrag* OR Arbetsmiljöverket) AND NOT Rättelse" },
+  { "id": "pf-koncern", "user": "u-mikael", "query": "Sydkust OR börsnotering" },
+  { "id": "pf-rena", "user": "u-anna", "query": "\"Rena Fönster\" OR \"Rena Fonster\" OR fönsterput*" },
+  { "id": "pf-puts", "user": "u-anna", "query": "*putsning OR fallskydd" }
+]

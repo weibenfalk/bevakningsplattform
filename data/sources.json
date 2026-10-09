@@ -1,0 +1,13 @@
+[
+  { "id": "bolagsverket", "name": "Bolagsverket kungörelser", "weight": 2.0 },
+  { "id": "skatteverket", "name": "Skatteverket nyheter", "weight": 2.0 },
+  { "id": "di", "name": "Dagens industri", "weight": 1.5 },
+  { "id": "barometern", "name": "Barometern", "weight": 1.2 },
+  { "id": "byggbranschen", "name": "Byggbranschen idag", "weight": 1.2 },
+  { "id": "smhi", "name": "SMHI", "weight": 1.0 },
+  { "id": "google_reviews", "name": "Google-recensioner", "weight": 0.8 },
+  { "id": "platsbanken", "name": "Platsbanken", "weight": 0.8 },
+  { "id": "facebook", "name": "Facebookgrupper", "weight": 0.5 },
+  { "id": "forum", "name": "Byggahus-forum", "weight": 0.5 },
+  { "id": "blogg", "name": "Hemmabloggar", "weight": 0.5 }
+]

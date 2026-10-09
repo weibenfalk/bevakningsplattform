@@ -1,0 +1,5 @@
+[
+  { "id": "u-mikael", "name": "Mikael", "role": "Marknadschef koncern", "scopes": ["koncern", "takvard", "fonsterputs"] },
+  { "id": "u-kalle", "name": "Kalle", "role": "Säljchef takvård", "scopes": ["takvard"] },
+  { "id": "u-anna", "name": "Anna", "role": "Verksamhetschef fönsterputs", "scopes": ["fonsterputs"] }
+]
