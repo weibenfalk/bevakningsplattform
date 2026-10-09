@@ -10,7 +10,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
 - `npm test`: de ärvda testerna, gröna (de testar fel saker).
-- `npm run test:kanda-fel`: 11 tester som beskriver korrekt beteende och fallerar tills felen är rättade.
+- `npm run test:kanda-fel`: tester som beskriver korrekt beteende och fallerar tills felen är rättade. Se statustabellen överst i `docs/kodgranskning.md` för vilka som återstår.
 - `npm run demo` (och `-- --trasig-ai`) visar läckorna per användare och skriver mejlförhandsvisningar till `out/`.
 - Hela kodgranskningen finns i `docs/kodgranskning.md`. Läs den innan du ändrar i `src/`.
 
@@ -24,6 +24,8 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
    (det har redan gått fel en gång).
 5. **Inga personuppgifter** i dokumentation, kod eller commits (gäller även git-författaren). Inga hemligheter i repot.
 6. **Ändra aldrig den ärvda logiken tyst.** Förklara alltid vad som var fel och varför.
+7. **Uppdatera statustabellen** överst i `docs/kodgranskning.md` varje gång ett fel rättas (eller ett nytt hittas):
+   status, testet som bevisar det och hänvisning till beslutet i `docs/beslutslogg.md`.
 
 ## Plan, i prioritetsordning
 

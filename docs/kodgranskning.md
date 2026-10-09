@@ -1,8 +1,39 @@
 # Kodgranskning av den ärvda kodbasen
 
+## Status per fel
+
+Uppdateras varje gång ett fel rättas (se Arbetsregler i `CLAUDE.md`). Status: **rättat**, **kvar** eller
+**medvetet bortvalt** (dokumenteras då som nästa steg i `ÖVERLÄMNING.md`). Allvarlighetsgrad enligt nedan:
+K = kritisk, H = hög, M = medel. Beslut hänvisar till avsnittsrubriken i `docs/beslutslogg.md`.
+Fel 1–11 är de kända felen i `test/kanda-fel`. De som har bokstav eller nummer över 11 hittades på vägen.
+
+| Fel | Beskrivning | Grad | Status | Test som bevisar det | Beslut |
+|---|---|---|---|---|---|
+| 1 | Akuta nyheter går förbi arbetsytan (`orWhere`) | K | rättat | `test/access.spec.ts`: "en akut takvårdsnyhet når inte en användare som bara har fönsterputs" | "Fel 1 – akuta nyheter går förbi arbetsytan" |
+| 2 | Nekad entitet och sökfilter gäller bara akutgrenen (samma rot som fel 1) | K | rättat | `test/access.spec.ts`: "en nekad entitet döljs även för artiklar inom användarens arbetsyta" | "Fel 1 – akuta nyheter går förbi arbetsytan" |
+| 3 | `select('*')` lämnar ut `full_text` | K | rättat | `test/access.spec.ts`: "åtkomstmodulen lämnar aldrig ut fulltexten" | "Fel 3 – fulltext lämnar åtkomstmodulen, och sort är en vitlista" |
+| 3b | SQL-injektion via `sort` (`orderByRaw`) | K | rättat | `test/access.spec.ts`: "sort tar bara emot vitlistade kolumner (SQL-injektion via sort)" | "Fel 3 – fulltext lämnar åtkomstmodulen, och sort är en vitlista" |
+| 4 | Artikel utan affärsområde får standardvärdet takvard + fonsterputs och når alla | K | rättat | `test/enrich.spec.ts`: "ett AI-svar utan giltig arbetsyta publiceras inte, utan sparas flaggad för granskning", plus `test/access.spec.ts`: "en artikel flaggad för granskning visas aldrig, även om arbetsytan stämmer" | "Fel 4 – ett AI-svar utan giltig arbetsyta publiceras inte (fail closed)" |
+| 4b | Modellen anger en giltig men felaktig arbetsyta, eller luras av injektion (r19) | K | kvar (känd risk) | saknas | "Fel 4 …", under Känd risk och Nästa steg |
+| 5 | Originaltexten blir sammanfattning när AI-svaret är ogiltigt | K | rättat | `test/enrich.spec.ts`: "när AI:n svarar fel sparas ingen sammanfattning (inte originaltexten) och artikeln flaggas", plus `test/raw-text.spec.ts` (mejl, export och arkitekturregel) | "Fel 5 – originaltexten används aldrig som sammanfattning" |
+| 6 | HTML i sammanfattningen escapas inte (`marked`) | K | kvar | `test/kanda-fel`: "fel 6: HTML i sammanfattningen escapas" | – |
+| 7 | `javascript:`-länkar renderas i mejlet | K | kvar | `test/kanda-fel`: "fel 7: länkar som inte är http(s) renderas inte" | – |
+| 8 | `normalizeUrl` tar bara bort varannan spårningsparameter | H | kvar | `test/kanda-fel`: "fel 8: alla spårningsparametrar tas bort ur URL:en …" | – |
+| 9 | Tomt alias eller tom domän matchar allt | H | kvar | `test/kanda-fel`: "fel 9: en entitet utan domän matchar inte varje text" | – |
+| 10 | Svenska böjningar matchar inte (Takvårdarnas) | H | kvar | `test/kanda-fel`: "fel 10: alias med svensk böjning matchar (Takvårdarnas)" | – |
+| 11 | Orelaterade texter räknas som samma story (vektorerna normaliseras inte) | H | kvar | `test/kanda-fel`: "fel 11: två orelaterade texter räknas inte som samma story" | – |
+| 12 | `deny_categories` lästes in men användes aldrig, och artiklarna saknade kategori | K | rättat | `test/access.spec.ts`: "en nekad kategori döljs även för artiklar inom användarens arbetsyta" och "… även akuta artiklar och sökträffar", plus `test/enrich.spec.ts` (kategori ur fast lista, minst en) | "`deny_categories` gäller nu, och kategorin sätts av berikningen" |
+| 13 | `renderDigest` kraschar på `summary = null`. Uppstod när fel 5 gjorde sammanfattningen nullbar, inget ärvt fel | M | rättat | `test/raw-text.spec.ts`: "klarar en artikel utan sammanfattning (null) och skriver inte "null"" | "Fel 5 – originaltexten används aldrig som sammanfattning" |
+| 14 | Trasig teckenkodning vid inläsning (r20, "FÃ¶nster"). Upptäcktes i demon efter fel 4 | H | kvar | saknas | "Fel 4 …", under demons resultat |
+
+Tabellen listar felen i incidenten och de kända felen. "Fynd per fil" längre ned gäller fortfarande för det som
+inte är rättat, bland annat `otherSources` och tröskeln `>` i `digest.service.ts`, `?userId=` i
+`export.controller.ts`, `triage.service.ts`, `score.ts`, `trend.service.ts`, `entity-import.service.ts` och
+arkitekturtestet. De får en rad i tabellen när de tas upp. Inga fel är hittills medvetet bortvalda.
+
 Bedömd som om den gick i produktion. Allvarlighetsgrad: **K** = kritisk (läcker data eller är ett säkerhetshål),
 **H** = hög (ger fel resultat), **M** = medel.
-"Test" hänvisar till `test/kanda-fel/kanda-fel.spec.ts`.
+Tester för rättade fel ligger i den vanliga sviten, och de som återstår ligger i `test/kanda-fel/kanda-fel.spec.ts`.
 
 ## Incidenten: varför Anna fick en konkursnyhet om takvård med hela artikeln
 
