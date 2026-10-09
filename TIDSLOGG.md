@@ -2,7 +2,7 @@
 
 30 minuter
 
-# Felrättningar
+# Felrättningar och fix
 
-120 minuter
+150 minuter
 

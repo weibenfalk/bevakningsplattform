@@ -60,7 +60,7 @@ export class ArticleAccessService {
 
   /** Villkoren som alltid gäller: omfånget, nekade entiteter och kategorier, och inga flaggade artiklar. */
   private scoped(scope: ContentScope): Knex.QueryBuilder {
-    // Arbetsytan är en hård gräns, även för akuta händelser. Lägg aldrig till en
+    // Arbetsytan är en hård gräns, även för akuta händelser (specens avsnitt 2). Lägg aldrig till en
     // orWhere här: den skulle förbigå alla filter som läggs på nedan.
     const query = this.knex('articles')
       .where('spaces', '&&', scope.spaces)

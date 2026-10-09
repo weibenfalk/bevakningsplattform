@@ -52,9 +52,15 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 verifiering av akutlarm mot en andra källa, riktiga insamlare och robots.txt, embeddings, sök, redaktörsgränssnitt,
 larmmotor och kalibrering av trösklar.
 
+## Krav i specen som styr koden (inga antaganden)
+
+- **Arbetsytan är en hård gräns, även för akuta händelser.** Specens avsnitt 2: "arbetsytor (hård gräns)" och
+  "Omfånget gäller överallt: sök, arkiv, export, API, utskick och förhandsgranskning." Det finns inget undantag för akuta
+  händelser. Att "akuta händelser kan skickas utanför schemat" (avsnitt 7) gäller *när* de skickas, inte *vem* som får
+  se dem.
+
 ## Antaganden (stäm av med företaget eller logga dem)
 
-- Arbetsytan är en hård gräns, även för akuta händelser.
 - Koncern är en egen arbetsyta, inte en överordnad som ser allt.
 - Tidsstämplar utan tidszon tolkas som Europe/Stockholm.
 - Klockan vid körning: dag 1 = 2026-10-01 07:00, dag 2 (`raw_items_dag2.json`) = 2026-10-03 07:00.
