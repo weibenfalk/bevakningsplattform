@@ -1,9 +1,12 @@
 import { Knex } from 'knex';
 
 /**
- * Återskapat schema: de tabeller och kolumner som den ärvda koden förutsätter.
- * Migrationerna saknades i startkoden. Det här är INTE den slutliga datamodellen,
- * bara det minimum som krävs för att köra den ärvda koden och visa hur den beter sig.
+ * Hela datamodellen (specens krav 2: inklusive behörighet, från första migrationen).
+ * Migrationerna saknades i startkoden. Tabellerna överst är de som den ärvda koden använder.
+ * De under "Behörighet, profiler och utskick" används inte av koden än. De finns för att
+ * schemat inte ska behöva byggas om när frågespråket, profilmatchningen och utskicken kopplas in.
+ * Den gamla `content_scopes` används fortfarande för omfånget, och ersätts av memberships i ett senare steg.
+ * Kolumnerna är en rimlig första tolkning av specen och inte provade mot kod, så förvänta dig justeringar.
  */
 export async function up(knex: Knex): Promise<void> {
   await knex.raw(`
@@ -72,9 +75,135 @@ export async function up(knex: Knex): Promise<void> {
       article_id  integer NOT NULL REFERENCES articles(id),
       created_at  timestamptz NOT NULL DEFAULT now()
     );
+
+    -- Behörighet, profiler och utskick (används inte av koden än).
+    CREATE TABLE workspaces (
+      id    text PRIMARY KEY,
+      name  text NOT NULL
+    );
+
+    CREATE TABLE users (
+      id    text PRIMARY KEY,
+      name  text NOT NULL,
+      role  text NOT NULL CHECK (role IN ('owner', 'sysadmin', 'admin', 'editor', 'analyst', 'reader', 'service'))
+    );
+
+    -- Arbetsytan är en hård gräns. Nekat vinner alltid över tillåtet (specens avsnitt 2).
+    CREATE TABLE memberships (
+      user_id          text NOT NULL REFERENCES users(id),
+      workspace_id     text NOT NULL REFERENCES workspaces(id),
+      deny_categories  text[] NOT NULL DEFAULT '{}',
+      deny_entities    text[] NOT NULL DEFAULT '{}',
+      deny_sources     text[] NOT NULL DEFAULT '{}',
+      max_urgency      text,
+      PRIMARY KEY (user_id, workspace_id)
+    );
+
+    CREATE TABLE profiles (
+      id          text PRIMARY KEY,
+      owner_id    text NOT NULL REFERENCES users(id),
+      spaces      text[] NOT NULL,
+      visibility  text NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'workspace', 'organization')),
+      created_at  timestamptz NOT NULL DEFAULT now()
+    );
+
+    -- Profiler versioneras: en ändrad fråga ger en ny version, och gamla träffar pekar på sin version.
+    CREATE TABLE profile_versions (
+      profile_id      text NOT NULL REFERENCES profiles(id),
+      version         integer NOT NULL,
+      query           text NOT NULL,
+      semantic_query  text,
+      filters         jsonb NOT NULL DEFAULT '{}',
+      instruction     text,
+      created_at      timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (profile_id, version)
+    );
+
+    -- Varför en artikel kom med: vilken profil, vilken term och vilken poäng (specens avsnitt 2).
+    CREATE TABLE profile_matches (
+      profile_id       text NOT NULL REFERENCES profiles(id),
+      profile_version  integer NOT NULL,
+      article_id       integer NOT NULL REFERENCES articles(id),
+      term             text NOT NULL,
+      score            real NOT NULL,
+      created_at       timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (profile_id, article_id, term),
+      FOREIGN KEY (profile_id, profile_version) REFERENCES profile_versions(profile_id, version)
+    );
+
+    CREATE TABLE publications (
+      id          text PRIMARY KEY,
+      name        text NOT NULL,
+      spaces      text[] NOT NULL,
+      schedule    text NOT NULL,
+      visibility  text NOT NULL DEFAULT 'workspace' CHECK (visibility IN ('private', 'workspace', 'organization'))
+    );
+
+    -- Undantag per objekt från synligheten (specens avsnitt 2), för profiler och publikationer.
+    CREATE TABLE visibility_exceptions (
+      object_type  text NOT NULL CHECK (object_type IN ('profile', 'publication')),
+      object_id    text NOT NULL,
+      user_id      text NOT NULL REFERENCES users(id),
+      allow        boolean NOT NULL,
+      PRIMARY KEY (object_type, object_id, user_id)
+    );
+
+    CREATE TABLE sections (
+      id              serial PRIMARY KEY,
+      publication_id  text NOT NULL REFERENCES publications(id),
+      profile_id      text NOT NULL REFERENCES profiles(id),
+      title           text NOT NULL,
+      position        integer NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE subscriptions (
+      user_id         text NOT NULL REFERENCES users(id),
+      publication_id  text NOT NULL REFERENCES publications(id),
+      extra_profiles  text[] NOT NULL DEFAULT '{}',
+      PRIMARY KEY (user_id, publication_id)
+    );
+
+    CREATE TABLE editions (
+      id              serial PRIMARY KEY,
+      publication_id  text NOT NULL REFERENCES publications(id),
+      status          text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'sent')),
+      content         jsonb NOT NULL DEFAULT '{}',
+      created_at      timestamptz NOT NULL DEFAULT now(),
+      sent_at         timestamptz
+    );
+
+    -- Ett utskick per utgåva och mottagare, renderat inom mottagarens omfång.
+    CREATE TABLE deliveries (
+      id          serial PRIMARY KEY,
+      edition_id  integer NOT NULL REFERENCES editions(id),
+      user_id     text NOT NULL REFERENCES users(id),
+      sent_at     timestamptz,
+      UNIQUE (edition_id, user_id)
+    );
+
+    CREATE TABLE feedback (
+      id           serial PRIMARY KEY,
+      delivery_id  integer NOT NULL REFERENCES deliveries(id),
+      article_id   integer NOT NULL REFERENCES articles(id),
+      vote         text NOT NULL CHECK (vote IN ('up', 'down')),
+      created_at   timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (delivery_id, article_id)
+    );
+
+    -- Körningslogg per pipelinesteg (specens krav 7).
+    CREATE TABLE pipeline_runs (
+      id           serial PRIMARY KEY,
+      step         text NOT NULL,
+      status       text NOT NULL CHECK (status IN ('running', 'ok', 'failed')),
+      started_at   timestamptz NOT NULL DEFAULT now(),
+      finished_at  timestamptz,
+      details      jsonb NOT NULL DEFAULT '{}'
+    );
   `);
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex.raw(`DROP TABLE skipped_items, entity_matches, articles, entities, content_scopes`);
+  await knex.raw(`DROP TABLE pipeline_runs, feedback, deliveries, editions, subscriptions, sections, visibility_exceptions,
+    publications, profile_matches, profile_versions, profiles, memberships, users, workspaces,
+    skipped_items, entity_matches, articles, entities, content_scopes`);
 }

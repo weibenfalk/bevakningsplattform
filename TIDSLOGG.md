@@ -6,3 +6,7 @@
 
 150 minuter
 
+# Förstå kod och granska AI
+
+60 minuter
+

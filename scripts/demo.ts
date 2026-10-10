@@ -44,7 +44,7 @@ const readJson = <T>(file: string): T => JSON.parse(readFileSync(`data/${file}`,
 async function main() {
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
-  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes RESTART IDENTITY');
+  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes RESTART IDENTITY CASCADE');
 
   const users = readJson<{ id: string; name: string; role: string; scopes: string[] }[]>('users.json');
   await knex('content_scopes').insert(users.map((u) => ({ user_id: u.id, spaces: u.scopes })));

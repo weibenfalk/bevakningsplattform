@@ -9,8 +9,10 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 ## Status
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
-- `npm test`: de ärvda testerna, gröna (de testar fel saker).
-- De 11 kända felen är rättade och testerna ligger i den vanliga sviten (`test/`). Före-läget, med alla 11 som röda tester, finns i git-historiken (commit `8cb6c87`, `test/kanda-fel/kanda-fel.spec.ts`). Se statustabellen överst i `docs/kodgranskning.md` för vad som återstår.
+- `npm test`: 199 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
+- De 11 kända felen är rättade, liksom flera fel som hittades vid granskningen (se statustabellen överst i `docs/kodgranskning.md`, som också visar vad som återstår). Före-läget med alla 11 som röda tester finns i git-historiken (commit `8cb6c87`, `test/kanda-fel/kanda-fel.spec.ts`).
+- Incidenten, pipelinebuggarna (plan 1 och 2) och dedupe/idempotens är gjorda. Hela datamodellen (krav 2) ligger i den första migrationen, men tabellerna för behörighet, profiler och utskick används inte av koden än (`content_scopes` styr omfånget).
+- Kvar: frågespråket (plan 3), `ÖVERLÄMNING.md` och slutversionen av `TIDSLOGG.md` och beslutsloggen (plan 4). Äkta autentisering saknas (`AuthGuard` är en platshållare).
 - `npm run demo` (och `-- --trasig-ai`) visar läckorna per användare och skriver mejlförhandsvisningar till `out/`.
 - Hela kodgranskningen finns i `docs/kodgranskning.md`. Läs den innan du ändrar i `src/`.
 
@@ -29,28 +31,18 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 
 ## Plan, i prioritetsordning
 
-1. **Incidenten**: Anna (fönsterputs) fick en konkursnyhet om takvård med hela artikeln.
-   - Skriv om `ArticleAccessService`: omfånget gäller alltid, även för akuta nyheter, och nekade entiteter och
-     kategorier gäller överallt. Välj explicita kolumner, aldrig `full_text`. Sortering bara via en vitlista, för att
-     stoppa SQL-injektion via `sort`.
-   - `EnrichService`: modellen får aldrig bestämma arbetsyta. Om AI-svaret är ogiltigt är artikeln inte klar och ska
-     inte publiceras. Fall aldrig tillbaka på originaltexten.
-   - `render.ts`: escapa sammanfattningen och ta bort `marked`. Tillåt bara http- och https-länkar.
-   - `digest.service.ts`: `otherSources` ska gå via åtkomstmodulen.
-   - `export.controller.ts`: `?userId=` får bara användas av admin.
-   - Arkitekturtestet: fånga också `knex('articles')`, helst med TypeScript-kompilatorn i stället för regex.
-2. **Pipelinebuggar**: `normalizeUrl`, entitetsmatchning (tomma alias, å/ä/ö, böjningar), entitetsimport (validering,
-   trimning, EXEMPEL-raden, "Hög", stora id som text), similarity (normalisera vektorerna) och triage (ska inte släppa
-   igenom allt när den fallerar).
-3. **Frågespråket** (krav 4 i specifikationen): egen tokenizer och rekursiv parser **utan reguljära uttryck**, med minst
+1. ~~**Incidenten**~~ (klar): `ArticleAccessService` med omfång som alltid gäller, explicita kolumner och vitlistad `sort`. `EnrichService` utan modellstyrd arbetsyta och utan reserv till originaltexten. `render.ts` utan `marked` och med bara http(s)-länkar. `otherSources` via åtkomstmodulen. `?userId=` bara för admin.
+   - **Kvar:** arkitekturtestet fångar fortfarande inte `knex('articles')`. Bygg det med TypeScript-kompilatorn i stället för regex.
+2. ~~**Pipelinebuggar**~~ (klar, utom det som står som "kvar" i statustabellen): `normalizeUrl`, entitetsmatchning, entitetsimport, similarity och triage.
+3. **Frågespråket** (krav 4 i specifikationen) – **nästa**: egen tokenizer och rekursiv parser **utan reguljära uttryck**, med minst
    40 tester inklusive syntaxfel (se `data/profiles.json`: `pf-tak-pris` har en oparad parentes och `pf-puts` en
-   inledande `*`).
+   inledande `*`). Kopplas sedan till `profile_matches` (tabellen finns redan).
 4. **Dokumentation**: `ÖVERLÄMNING.md` (vad fungerar, vad fungerar inte, risker och nästa steg i ordning), `TIDSLOGG.md`
-   och färdig beslutslogg med AI-logg.
+   och färdig beslutslogg med AI-logg (AI-loggen har sju punkter, varav fyra där AI:n hade fel eller avvisades).
 
 **Medvetet bortvalt** (dokumenteras som nästa steg i ÖVERLÄMNING.md): AI-router med budgettak, hallucinationsskydd,
 verifiering av akutlarm mot en andra källa, riktiga insamlare och robots.txt, embeddings, sök, redaktörsgränssnitt,
-larmmotor och kalibrering av trösklar.
+larmmotor och kalibrering av trösklar. Samma gäller att koppla in behörighetstabellerna (`memberships` m.fl.).
 
 ## Krav i specen som styr koden (inga antaganden)
 

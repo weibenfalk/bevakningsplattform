@@ -140,7 +140,7 @@ inte köra `npm run migrate` för testerna.
 | `src/pipeline/` | Förberedelse, dubblettkontroll, triage, berikning, poäng, entitetsmatchning |
 | `src/llm/` | `LlmProvider`-gränssnittet och stubben |
 | `src/digest/`, `src/admin/` | Utskick och export |
-| `migrations/` | Schemat (den första migrationen är hela datamodellen) |
+| `migrations/` | Schemat. Den första migrationen är hela datamodellen (krav 2). Tabellerna för behörighet, profiler och utskick används inte av koden än |
 | `scripts/demo.ts` | Demon (databasen `bevakning`) |
 | `test/` | Tester (databasen `bevakning_test`) |
 | `data/` | Testdata: källor, användare, entiteter och råposter |
