@@ -130,13 +130,13 @@ npm run typecheck
 
 ### Testfiler
 
-464 tester i 34 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+481 tester i 34 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
 | Fil | Vad den testar | Tester | Databas |
 |---|---|---|---|
-| `access.spec.ts` | Behörighet: arbetsytan som hård gräns (även akuta), nekade entiteter och kategorier, ingen fulltext, vitlista för `sort`, flaggade artiklar | 10 | ja |
+| `access.spec.ts` | Behörighet: arbetsytan som hård gräns (även akuta), tillåtna och nekade kategorier, källor och entiteter (nekat vinner), högsta brådska, ingen fulltext, vitlista för `sort`, flaggade artiklar | 27 | ja |
 | `raw-text.spec.ts` | Råtext lämnar aldrig systemet: mejl, export och arkitekturregel för `full_text`, samt mejl utan sammanfattning | 4 | ja |
 | `render.spec.ts` | Mejlrendering: escapad text, bara http(s)-länkar i huvudlänk och "Även:" | 12 | nej |
 | `export.spec.ts` | Export: roll i `AuthGuard`, `?userId=` bara för admin, skydd mot CSV-formler | 14 | delvis |

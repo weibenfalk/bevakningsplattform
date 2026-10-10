@@ -58,12 +58,13 @@ Fel 1–11 var de kända felen i `test/kanda-fel`, som nu är borttagen. Testern
 | 45 | Systemet mindes inte vad som skickats: ett andra utskick hade upprepat varje artikel från det första, och uppföljningsfaktorn ("storyn redan funnits i ett tidigare utskick") gick inte att avgöra | H | rättat (utskickslogg i `editions`, `deliveries` och `delivery_items`, `DigestService.send`) | `test/delivery.spec.ts` (22 tester: skickas inte igen, per användare, utgåva och leverans sparas, omkörning, utkast räknas inte, omfånget gäller, uppföljning märks) och `test/day2.spec.ts` ("inget som redan skickats på dag 1 skickas igen på dag 2" och en oberoende uträkning av dag 2 per användare) | "Dag 2 – …" och "Utskicksloggen använder editions, deliveries och delivery_items …" |
 | 46 | En rättelse av en regeländring (d05) hade inte kommit med om dess poäng låg under tröskeln eller utskicket var fullt, och `pf-regler` (`NOT Rättelse`) träffar den inte | H | rättat (`isCorrection`: alltid med, men inom omfånget och inte igen till samma användare) | `test/correction.spec.ts` (12 tester), `test/delivery.spec.ts`: "rättelser ska alltid med" (7 tester) och `test/day2.spec.ts`: "d05 kommer med även om poängen skulle vara under tröskeln" | "Dag 2 – …" |
 | 47 | `npm run demo -- --trasig-ai` kraschade i sitt sista avsnitt (antog att r01 sparats, men triage sållar bort allt när AI:n svarar fel) | M | rättat | ingen automatisk test (skriptet körs för hand: `npm run demo -- --trasig-ai`) | "Dag 2 – …", under Följdändringar |
+| 48 | Innehållsomfånget saknade det specens avsnitt 2 kräver: tillåtna kategorier, källor och entiteter, nekade källor och högsta synliga brådska. Nekat ska alltid vinna över tillåtet, och en tom tillåtelselista betyder inga begränsningar utöver arbetsytan. Samma fynd som raden `access/content-scope.service.ts` under "Fynd per fil" | H | rättat (omfånget gäller via `scoped()`, alltså överallt. Äkta rollhantering via `memberships` kvar) | `test/access.spec.ts`: "tomma listor betyder inga begränsningar …", "en tillåtelselista för kategori/källa/entitet …", "en nekad källa döljs …", "nekat vinner över tillåtet" (två tester, fem fall), "högsta synliga brådska" (fyra nivåer), "en okänd högsta brådska är ett fel" och "omfånget gäller även andra källor i utskicket" | "Innehållsomfånget – tillåtna och nekade listor och högsta brådska" |
 
 Tabellen listar felen i incidenten, de kända felen och fynden i "Fynd per fil" som har fått en egen rad. Rader utan
 test ("saknas") får sitt test först när felet tas, enligt regel 1 i `CLAUDE.md`. Fel 19–38 fortsätter numreringen,
 eftersom 13–18 redan används. Inga fel är hittills medvetet bortvalda.
 
-Fynd i "Fynd per fil" som ännu **inte** har en rad i tabellen: att `ContentScopeService` saknar tillåtna listor, nekade källor och högsta brådska,
+Fynd i "Fynd per fil" som ännu **inte** har en rad i tabellen:
 `onConflict('raw_id').ignore()` i `enrich.service.ts` (rättat i fel 31–33), att
 `relevance` aldrig räknas ut (rättat i fel 25), `split(/\W+/)` i stubben och att `knexProvider` inte stänger sin pool.
 
@@ -88,7 +89,7 @@ Demon visar också att **r11 (koncernens möjliga börsnotering) når både Kall
 | Fil | Grad | Problem | Beslut |
 |---|---|---|---|
 | `access/article-access.service.ts` | K | `orWhere` för akuta förbigår omfånget. Eftersom AND binder hårdare än OR gäller nekade entiteter och sökfiltret bara akutgrenen (fel 1, 2). `deny_categories` används aldrig. `select('*')` lämnar ut `full_text` (fel 3). `orderByRaw(opts.sort)` ger SQL-injektion. | Skriv om |
-| `access/content-scope.service.ts` | H | Saknar tillåtna listor, nekade källor och högsta brådska enligt specifikationen. | Bygg ut |
+| `access/content-scope.service.ts` | H | Saknade tillåtna listor, nekade källor och högsta brådska enligt specifikationen (rättat, fel 48). | Bygg ut |
 | `admin/export.controller.ts` | K | Vem som helst kan ange `?userId=` och exportera en annan användares innehåll. `sort` skickas vidare till SQL. Inget skydd mot CSV-formler. | Skriv om |
 | `digest/digest.service.ts` | K | `otherSources` läser `articles` direkt förbi åtkomstmodulen. `...a` sprider hela raden. Tröskeln använder `>` i stället för `>=`. En databasfråga per artikel (N+1). Ingen hantering av uppföljning eller tunna utgåvor. | Skriv om |
 | `digest/render.ts` | K | `marked.parseInline(summary)` ger HTML-injektion i mejlet (fel 6). `javascript:`-länkar släpps igenom (fel 7). Saknar plaintext, dark mode och List-Unsubscribe. | Behåll `escapeHtml`, skriv om resten |

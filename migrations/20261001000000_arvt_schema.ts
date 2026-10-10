@@ -13,8 +13,15 @@ export async function up(knex: Knex): Promise<void> {
     CREATE TABLE content_scopes (
       user_id          text PRIMARY KEY,
       spaces           text[] NOT NULL,
+      -- Tom tillåtelselista = ingen begränsning utöver arbetsytan. Nekat vinner alltid över tillåtet (specens avsnitt 2).
+      allow_categories text[] NOT NULL DEFAULT '{}',
+      allow_sources    text[] NOT NULL DEFAULT '{}',
+      allow_entities   text[] NOT NULL DEFAULT '{}',
       deny_categories  text[] NOT NULL DEFAULT '{}',
-      deny_entities    text[] NOT NULL DEFAULT '{}'
+      deny_sources     text[] NOT NULL DEFAULT '{}',
+      deny_entities    text[] NOT NULL DEFAULT '{}',
+      -- Högsta brådska användaren får se (akut > agera > bevaka > info). NULL = alla. Ett okänt värde avvisas av ContentScopeService (fail closed).
+      max_urgency      text
     );
 
     CREATE TABLE entities (

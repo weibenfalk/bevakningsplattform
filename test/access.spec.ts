@@ -107,3 +107,113 @@ describe('ArticleAccessService: omfånget är en hård gräns', () => {
     expect(rows.map((r) => r.raw_id)).not.toContain('f1');
   });
 });
+
+describe('ArticleAccessService: tillåtna och nekade listor, och högsta brådska (specens avsnitt 2)', () => {
+  let access: ArticleAccessService;
+  beforeEach(async () => {
+    const app = await createTestingApp();
+    access = app.get(ArticleAccessService);
+  });
+  afterEach(closeTestingApp);
+
+  const scope = (patch: Record<string, unknown>) => testKnex()('content_scopes').where({ user_id: 'u-anna' }).update(patch);
+  const visible = async (artiklar: Record<string, unknown>[], q?: string) => {
+    await seedArticles(artiklar.map((a) => ({ spaces: ['fonsterputs'], urgency: 'info', ...a })));
+    return (await access.forUser('u-anna', { q })).map((r) => r.raw_id).sort();
+  };
+
+  it('tomma listor betyder inga begränsningar utöver arbetsytan', async () => {
+    const rows = await visible([
+      { raw_id: 'a', categories: ['regler'], source_name: 's1', entity_ids: ['e1'], urgency: 'akut' },
+      { raw_id: 'b', categories: [], source_name: null, entity_ids: [] },
+    ]);
+    expect(rows).toEqual(['a', 'b']);
+  });
+
+  it.each([
+    ['kategori', { allow_categories: ['regler'] }],
+    ['källa', { allow_sources: ['s1'] }],
+    ['entitet', { allow_entities: ['e1'] }],
+  ])('en tillåtelselista för %s visar bara det som är med på den', async (_typ, allow) => {
+    await scope(allow);
+    const rows = await visible([
+      { raw_id: 'med', categories: ['regler'], source_name: 's1', entity_ids: ['e1'] },
+      { raw_id: 'flera', categories: ['makro', 'regler'], source_name: 's1', entity_ids: ['e2', 'e1'] },
+      { raw_id: 'utan', categories: ['makro'], source_name: 's2', entity_ids: ['e2'] },
+      { raw_id: 'tom', categories: [], source_name: null, entity_ids: [] },
+    ]);
+    expect(rows).toEqual(['flera', 'med']);
+  });
+
+  it('en nekad källa döljs, även akut och i sökträffar', async () => {
+    await scope({ deny_sources: ['s2'] });
+    const rows = await visible(
+      [
+        { raw_id: 'ok', source_name: 's1', title: 'Fönster ok' },
+        { raw_id: 'nekad', source_name: 's2', urgency: 'akut', title: 'Fönster nekad' },
+      ],
+      'fönster',
+    );
+    expect(rows).toEqual(['ok']);
+  });
+
+  it.each([
+    ['kategori', { allow_categories: ['regler'], deny_categories: ['regler'] }],
+    ['källa', { allow_sources: ['s1'], deny_sources: ['s1'] }],
+    ['entitet', { allow_entities: ['e1'], deny_entities: ['e1'] }],
+  ])('nekat vinner över tillåtet: %s som är både tillåten och nekad döljs', async (_typ, both) => {
+    await scope(both);
+    const rows = await visible([
+      { raw_id: 'a', categories: ['regler'], source_name: 's1', entity_ids: ['e1'] },
+      { raw_id: 'b', categories: ['regler'], source_name: 's1', entity_ids: ['e1'], urgency: 'akut' },
+    ]);
+    expect(rows).toEqual([]);
+  });
+
+  it.each([
+    ['kategori', { allow_categories: ['regler'], deny_categories: ['konkurrent'] }, { categories: ['regler', 'konkurrent'] }],
+    ['entitet', { allow_entities: ['e1'], deny_entities: ['e2'] }, { entity_ids: ['e1', 'e2'] }],
+  ])('nekat vinner över tillåtet: en artikel med både tillåten och nekad %s döljs', async (_typ, lists, article) => {
+    await scope(lists);
+    const rows = await visible([
+      { raw_id: 'bada', categories: ['regler'], entity_ids: ['e1'], ...article },
+      { raw_id: 'bara-tillaten', categories: ['regler'], entity_ids: ['e1'] },
+    ]);
+    expect(rows).toEqual(['bara-tillaten']);
+  });
+
+  it('en artikel utan källa träffas inte av en nekad källa, men släpps inte in av en tillåtelselista', async () => {
+    await scope({ deny_sources: ['s2'] });
+    expect(await visible([{ raw_id: 'x', source_name: null }])).toEqual(['x']);
+    await scope({ deny_sources: [], allow_sources: ['s1'] });
+    expect(await visible([{ raw_id: 'y', source_name: null }])).toEqual([]);
+  });
+
+  it.each([
+    ['akut', ['agera', 'akut', 'bevaka', 'info']],
+    ['agera', ['agera', 'bevaka', 'info']],
+    ['bevaka', ['bevaka', 'info']],
+    ['info', ['info']],
+  ])('högsta synliga brådska %s', async (max, forvantat) => {
+    await scope({ max_urgency: max });
+    const rows = await visible(['akut', 'agera', 'bevaka', 'info'].map((u) => ({ raw_id: u, urgency: u })));
+    expect(rows).toEqual(forvantat);
+  });
+
+  it('en okänd högsta brådska är ett fel och visar inget (fail closed)', async () => {
+    await scope({ max_urgency: 'extra-akut' });
+    await seedArticles([{ raw_id: 'a', spaces: ['fonsterputs'], urgency: 'info' }]);
+    await expect(access.forUser('u-anna')).rejects.toThrow(/brådska/i);
+  });
+
+  it('omfånget gäller även andra källor i utskicket (otherSources)', async () => {
+    await scope({ deny_sources: ['s2'], max_urgency: 'agera' });
+    await seedArticles([
+      { raw_id: 'a', spaces: ['fonsterputs'], cluster_id: 'c1', source_name: 's1', urgency: 'info' },
+      { raw_id: 'b', spaces: ['fonsterputs'], cluster_id: 'c1', source_name: 's2', urgency: 'info' },
+      { raw_id: 'c', spaces: ['fonsterputs'], cluster_id: 'c1', source_name: 's3', urgency: 'akut' },
+    ]);
+    const other = await access.sourcesByCluster('u-anna', ['c1']);
+    expect(other.get('c1')?.map((s) => s.source_name)).toEqual(['s1']);
+  });
+});

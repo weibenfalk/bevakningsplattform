@@ -84,7 +84,7 @@ export class ArticleAccessService {
     private readonly scopes: ContentScopeService,
   ) {}
 
-  /** Villkoren som alltid gäller: omfånget, nekade entiteter och kategorier, och inga flaggade artiklar. */
+  /** Villkoren som alltid gäller: arbetsytan, tillåtna och nekade kategorier, källor och entiteter, högsta brådska och inga flaggade artiklar. */
   private scoped(scope: ContentScope): Knex.QueryBuilder {
     // Arbetsytan är en hård gräns, även för akuta händelser (specens avsnitt 2). Lägg aldrig till en
     // orWhere här: den skulle förbigå alla filter som läggs på nedan.
@@ -98,6 +98,16 @@ export class ArticleAccessService {
     if (scope.denyCategories.length) {
       query.whereNot('categories', '&&', scope.denyCategories);
     }
+    // Nekade källor: en artikel utan källa kan inte träffas av en nekad källa, därför IS NULL OR.
+    if (scope.denySources.length) {
+      query.whereRaw('(source_name IS NULL OR NOT (source_name = ANY(?)))', [scope.denySources]);
+    }
+    // Tillåtelselistor (tom lista = ingen begränsning). Läggs till med AND, så nekat ovan vinner alltid.
+    // En artikel som saknar källa, kategori eller entitet släpps inte in av en icke-tom lista.
+    if (scope.allowCategories.length) query.where('categories', '&&', scope.allowCategories);
+    if (scope.allowEntities.length) query.where('entity_ids', '&&', scope.allowEntities);
+    if (scope.allowSources.length) query.whereIn('source_name', scope.allowSources);
+    if (scope.visibleUrgencies) query.whereIn('urgency', scope.visibleUrgencies);
     return query;
   }
 
