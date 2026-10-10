@@ -5,7 +5,7 @@ import { AdminController } from './admin/admin.controller';
 import { QueryTestService } from './admin/query-test.service';
 import { ExportController } from './admin/export.controller';
 import { CLOCK, fixedClock } from './config/clock';
-import { SOURCE_WEIGHTS, loadSourceWeights } from './config/sources';
+import { SOURCE_NAMES, SOURCE_WEIGHTS, loadSourceNames, loadSourceWeights } from './config/sources';
 import { USER_DIRECTORY, loadUserDirectory } from './config/users';
 import { knexProvider } from './db/knex.provider';
 import { DigestService } from './digest/digest.service';
@@ -28,6 +28,7 @@ import { TriageService } from './pipeline/triage.service';
     knexProvider,
     { provide: CLOCK, useValue: fixedClock() },
     { provide: SOURCE_WEIGHTS, useValue: loadSourceWeights() },
+    { provide: SOURCE_NAMES, useValue: loadSourceNames() },
     { provide: USER_DIRECTORY, useValue: loadUserDirectory() },
     { provide: LLM, useClass: StubProvider },
     ContentScopeService,

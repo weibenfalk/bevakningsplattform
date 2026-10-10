@@ -1,5 +1,7 @@
 export interface DigestArticle {
   title: string;
+  /** Källans namn. Visas bara när rubriken saknas (Google-recensioner och Facebookinlägg har ingen), så att artikeln går att känna igen. */
+  source?: string | null;
   url: string;
   summary: string | null;
   urgency: string;
@@ -25,6 +27,7 @@ function safeHref(url: string): string | null {
 }
 
 const LINK = 'color:#12294D;font-weight:600;text-decoration:none';
+const MUTED = 'color:#5A6473';
 const TEXT = 'color:#5A6473;font-size:14px;line-height:21px;margin:6px 0 0';
 
 function renderItem(a: DigestArticle): string {
@@ -37,10 +40,14 @@ function renderItem(a: DigestArticle): string {
 
   const why = (a.why ?? []).map((w) => `${escapeHtml(w.profile)} (${w.terms.map(escapeHtml).join(', ')})`).join(' · ');
 
+  // En tom rubrik blir en tom, osynlig länk. Visa i stället "(ingen rubrik)" i grått, följt av källans namn.
+  const text = a.title.trim() === ''
+    ? `<span style="${MUTED}">(ingen rubrik)</span>${a.source ? `<span style="${MUTED}"> · ${escapeHtml(a.source)}</span>` : ''}`
+    : escapeHtml(a.title);
   const href = safeHref(a.url);
   const title = href
-    ? `<a href="${escapeHtml(href)}" style="${LINK}">${escapeHtml(a.title)}</a>`
-    : `<span style="${LINK}">${escapeHtml(a.title)}</span>`;
+    ? `<a href="${escapeHtml(href)}" style="${LINK}">${text}</a>`
+    : `<span style="${LINK}">${text}</span>`;
 
   const label = a.followUp ? `<p style="${TEXT};font-size:12px;font-weight:600;text-transform:uppercase">Uppföljning</p>` : '';
 

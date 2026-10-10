@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { fetchUsers, fetchViewAs, type Article } from '@/api';
+import { ProfilesSection } from '@/components/ProfilesSection';
 import { QueryTester } from '@/components/QueryTester';
 import { ScoreBreakdown } from '@/components/ScoreBreakdown';
+import { ArticleTitle } from '@/components/ArticleTitle';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -26,9 +28,7 @@ function ArticleCard({ article }: { article: Article }) {
     <Card>
       <CardHeader>
         <CardTitle>
-          <a href={article.url} target="_blank" rel="noreferrer noopener" className="hover:underline">
-            {article.title}
-          </a>
+          <ArticleTitle title={article.title} url={article.url} source={article.source} />
         </CardTitle>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Badge variant="outline">Poäng {article.relevance ?? '–'}</Badge>
@@ -50,6 +50,7 @@ function ArticleCard({ article }: { article: Article }) {
 
 export default function App() {
   const [userId, setUserId] = useState<string>();
+  const [testRequest, setTestRequest] = useState<{ query: string; n: number }>();
   const users = useQuery({ queryKey: ['users'], queryFn: fetchUsers });
   const view = useQuery({ queryKey: ['view-as', userId], queryFn: () => fetchViewAs(userId!), enabled: !!userId });
   // Högst poäng först. Artiklar utan poäng sist.
@@ -74,13 +75,16 @@ export default function App() {
       </Select>
       {users.error && <ErrorBox error={users.error} />}
 
-      <QueryTester userId={userId} />
+      {userId && <ProfilesSection userId={userId} onTest={(query) => setTestRequest((prev) => ({ query, n: (prev?.n ?? 0) + 1 }))} />}
+
+      <QueryTester userId={userId} userName={users.data?.find((u) => u.id === userId)?.name} request={testRequest} />
 
       {view.isFetching && <p className="text-sm text-muted-foreground">Laddar artiklar…</p>}
       {view.error && <ErrorBox error={view.error} />}
 
       {view.data && !view.isFetching && (
-        <section className="flex flex-col gap-4">
+        <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="articles-heading">
+          <h2 id="articles-heading" className="text-lg font-semibold">Artiklar {view.data.user.name} ser ({articles.length})</h2>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-muted-foreground">Arbetsytor:</span>
             {view.data.user.spaces.map((s) => <Badge key={s}>{s}</Badge>)}

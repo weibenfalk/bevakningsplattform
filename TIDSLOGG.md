@@ -12,4 +12,4 @@
 
 # Frontend - enkelt admin gränssnitt
 
-1 h
+2 h

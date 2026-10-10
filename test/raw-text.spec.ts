@@ -43,14 +43,14 @@ describe('mejlrendering utan sammanfattning', () => {
 });
 
 /**
- * Uttalat undantag: åtkomstmodulen får läsa originaltexten på ett enda ställe, `matchArchive`, för frågetestaren.
+ * Uttalat undantag: åtkomstmodulen får läsa originaltexten på ett enda ställe, `matchWholeArchive`, för frågetestaren.
  * Motivering ur specen: originaltexten får inte visas eller skickas ut (utskick, visning, export), men får användas
  * för bearbetning i 90 dagar. Frågetestaren provar en profilfråga, alltså samma bearbetning som profilmatchningen,
  * och skiljer sig bara genom att den körs mot arkivet. Texten lämnar aldrig metoden: anroparen får artikelraden
  * (utan text) och de termer som träffade.
  */
 const FULLTEXT_READERS = [
-  { file: 'src/access/article-access.service.ts', method: 'matchArchive' },
+  { file: 'src/access/article-access.service.ts', method: 'matchWholeArchive' },
 ];
 
 /** Var i koden strängen 'full_text' används, som namnet på den metod (eller konstant) den står i. */
@@ -81,7 +81,7 @@ describe('arkitekturregel: råtext', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('i åtkomstmodulen läses originaltexten bara i matchArchive, aldrig i kolumnlistan eller någon annan metod', () => {
+  it('i åtkomstmodulen läses originaltexten bara i matchWholeArchive, aldrig i kolumnlistan eller någon annan metod', () => {
     for (const { file, method } of FULLTEXT_READERS) {
       const uses = fulltextUses(file, readFileSync(file, 'utf8'));
       expect(uses.length).toBeGreaterThan(0); // undantaget används fortfarande
@@ -92,6 +92,6 @@ describe('arkitekturregel: råtext', () => {
   it('detektorn fäller originaltexten i en annan metod och i kolumnlistan', () => {
     expect(fulltextUses('x.ts', "class A { forUser() { return q.select('full_text'); } }")).toEqual(['forUser']);
     expect(fulltextUses('x.ts', "const PUBLIC_COLUMNS = ['id', 'full_text'];")).toEqual(['PUBLIC_COLUMNS']);
-    expect(fulltextUses('x.ts', "class A { matchArchive() { q.select('full_text'); } }")).toEqual(['matchArchive']);
+    expect(fulltextUses('x.ts', "class A { matchWholeArchive() { q.select('full_text'); } }")).toEqual(['matchWholeArchive']);
   });
 });

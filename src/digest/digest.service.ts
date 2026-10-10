@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ArticleAccessService, ArticleRow } from '../access/article-access.service';
 import { pipelineConfig } from '../config/pipeline.config';
+import { SOURCE_NAMES, sourceLabel } from '../config/sources';
 import { renderDigest, DigestArticle } from './render';
 
 const URGENCY_ORDER = { akut: 0, agera: 1, bevaka: 2, info: 3 } as const;
@@ -15,7 +16,10 @@ const CANDIDATE_LIMIT = 1000;
 
 @Injectable()
 export class DigestService {
-  constructor(private readonly access: ArticleAccessService) {}
+  constructor(
+    private readonly access: ArticleAccessService,
+    @Inject(SOURCE_NAMES) private readonly sourceNames: Map<string, string>,
+  ) {}
 
   /**
    * Nästa utskick till användaren, som HTML. Sparar ingenting, så det går att förhandsgranska hur många gånger
@@ -60,6 +64,7 @@ export class DigestService {
 
     const items: DigestArticle[] = selected.map((a) => ({
       title: a.title,
+      source: sourceLabel(this.sourceNames, a.source_name),
       url: a.url,
       summary: a.summary,
       urgency: a.urgency,

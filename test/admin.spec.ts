@@ -17,6 +17,8 @@ describe('Admin: visa som en annan användare (läs-bara)', () => {
     await seedArticles([
       { raw_id: 't1', spaces: ['takvard'], urgency: 'akut', relevance: 90, title: 'Takvårdsnyhet', full_text: 'HEMLIG-FULLTEXT', categories: ['konkurrent'] },
       { raw_id: 'f1', spaces: ['fonsterputs'], urgency: 'info', relevance: 60, title: 'Fönsternyhet', full_text: 'HEMLIG-FULLTEXT' },
+      { raw_id: 'k1', spaces: ['takvard'], urgency: 'info', relevance: 5, title: '', source_name: 'facebook' },
+      { raw_id: 'k2', spaces: ['takvard'], urgency: 'info', relevance: 4, title: 'Okänd källa', source_name: 'finns-inte' },
       { raw_id: 'f2', spaces: ['fonsterputs'], urgency: 'info', relevance: 80, title: 'Fönster två', score_breakdown: JSON.stringify(BREAKDOWN), full_text: 'HEMLIG-FULLTEXT' },
     ]);
     const knex = testKnex();
@@ -77,10 +79,18 @@ describe('Admin: visa som en annan användare (läs-bara)', () => {
       urgency: 'info',
       spaces: ['fonsterputs'],
       categories: [],
+      source: null,
       scoreBreakdown: BREAKDOWN,
       profileMatches: [{ profileId: 'pf-puts', terms: ['fönsterputs'] }],
     });
     expect(body.articles[1].profileMatches).toEqual([]);
+  });
+
+  it('källan kommer med som namn, så att en artikel utan rubrik går att känna igen. En okänd källa visas med sitt id', async () => {
+    const body = await json('/admin/view-as/u-kalle');
+    const by = (title: string) => body.articles.find((a: { title: string }) => a.title === title);
+    expect(by('')).toMatchObject({ title: '', source: 'Facebookgrupper' });
+    expect(by('Okänd källa').source).toBe('finns-inte');
   });
 
   it('ingen full_text i svaret', async () => {

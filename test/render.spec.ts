@@ -42,3 +42,28 @@ describe('renderDigest: bara http- och https-länkar', () => {
     expect(html).not.toContain('"onmouseover=');
   });
 });
+
+describe('renderDigest: artiklar utan rubrik', () => {
+  it.each([
+    ['tom rubrik och källa', '', 'Google-recensioner', '(ingen rubrik)</span><span style="color:#5A6473"> · Google-recensioner</span>'],
+    ['bara blanksteg i rubriken', '   ', 'Facebookgrupper', '(ingen rubrik)</span><span style="color:#5A6473"> · Facebookgrupper</span>'],
+    ['ingen källa', '', null, '(ingen rubrik)</span></a>'],
+  ])('%s: "(ingen rubrik)" i grått, följt av källan, och länken har text', (_namn, title, source, forvantat) => {
+    const html = renderDigest([article({ title, source })]);
+    expect(html).toContain(forvantat);
+    expect(html).toContain('<a href="https://example.se/a"');
+    expect(html).not.toMatch(/<a [^>]*><\/a>/); // ingen tom, osynlig länk
+  });
+
+  it('en artikel med rubrik visar rubriken och inte "(ingen rubrik)", även om källan finns', () => {
+    const html = renderDigest([article({ title: 'Rubrik', source: 'DI' })]);
+    expect(html).toContain('>Rubrik</a>');
+    expect(html).not.toContain('ingen rubrik');
+  });
+
+  it('källans namn escapas', () => {
+    const html = renderDigest([article({ title: '', source: '<script>x</script>' })]);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+});

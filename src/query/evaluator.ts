@@ -143,3 +143,47 @@ export function explain(node: Node, article: Article): string[] {
       return [termText(node)];
   }
 }
+
+const group = (node: Node): string => (node.type === 'and' || node.type === 'or' ? `(${nodeText(node)})` : nodeText(node));
+
+/** Ett helt träd som läsbar fråga, till exempel `(rotavdrag* OR Arbetsmiljöverket) AND NOT Rättelse`. */
+export function nodeText(node: Node): string {
+  switch (node.type) {
+    case 'term':
+    case 'near':
+      return termText(node);
+    case 'not':
+      return `NOT ${group(node.child)}`;
+    case 'and':
+      return node.children.map(group).join(' AND ');
+    case 'or':
+      return node.children.map(group).join(' OR ');
+  }
+}
+
+/** Alla NOT-noder i trädet, även nästlade (en nod före sina barn). */
+export function notNodes(node: Node): Extract<Node, { type: 'not' }>[] {
+  switch (node.type) {
+    case 'not':
+      return [node, ...notNodes(node.child)];
+    case 'and':
+    case 'or':
+      return node.children.flatMap(notNodes);
+    default:
+      return [];
+  }
+}
+
+/** Trädet där just den här NOT-noden är borttagen (ersatt av ett villkor som alltid gäller). Originalet ändras inte. */
+export function relaxNot(node: Node, target: Node): Node {
+  if (node === target) return { type: 'and', children: [] };
+  switch (node.type) {
+    case 'not':
+      return { type: 'not', child: relaxNot(node.child, target) };
+    case 'and':
+    case 'or':
+      return { type: node.type, children: node.children.map((c) => relaxNot(c, target)) };
+    default:
+      return node;
+  }
+}

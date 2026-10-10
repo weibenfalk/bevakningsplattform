@@ -1,4 +1,4 @@
-import { Article, matches, splitWords } from '../src/query/evaluator';
+import { Article, matches, nodeText, notNodes, relaxNot, splitWords } from '../src/query/evaluator';
 import { parse } from '../src/query/parser';
 
 const traff = (query: string, article: Article): boolean => matches(parse(query), article);
@@ -199,5 +199,36 @@ describe('matches: NEAR/n', () => {
   it('kan kombineras med NOT och AND', () => {
     expect(traff('Rikstak NEAR/2 priset AND NOT pumpa*', art)).toBe(true);
     expect(traff('NOT (Rikstak NEAR/2 priset)', art)).toBe(false);
+  });
+});
+
+describe('NOT: vilket villkor som uteslöt en artikel', () => {
+  const regler = '(rotavdrag* OR Arbetsmiljöverket) AND NOT Rättelse';
+  const rattelse = text('Rättelse: rotavdraget 2027', { title: 'Rättelse: rotavdraget' });
+
+  it.each([
+    ['Rikstak', 'Rikstak'],
+    ['"Rena Fönster" OR fönsterput*', '"Rena Fönster" OR fönsterput*'],
+    ['a AND (b OR c)', 'a AND (b OR c)'],
+    ['title:Rikstak NEAR/3 takmålning', 'title:Rikstak NEAR/3 takmålning'],
+    [regler, regler],
+    ['a AND NOT (b OR c)', 'a AND NOT (b OR c)'],
+  ])('nodeText skriver %s tillbaka som läsbar fråga', (query, expected) => {
+    expect(nodeText(parse(query))).toBe(expected);
+  });
+
+  it('notNodes hittar varje NOT i trädet, även nästlade', () => {
+    expect(notNodes(parse(regler)).map(nodeText)).toEqual(['NOT Rättelse']);
+    expect(notNodes(parse('a AND NOT b AND NOT (c OR NOT d)')).map(nodeText)).toEqual(['NOT b', 'NOT (c OR NOT d)', 'NOT d']);
+    expect(notNodes(parse('a OR b'))).toEqual([]);
+  });
+
+  it('relaxNot tar bort just ett NOT-villkor: artikeln som NOT uteslöt träffar då, men inte om resten också missar', () => {
+    const tree = parse(regler);
+    const [not] = notNodes(tree);
+    expect(matches(tree, rattelse)).toBe(false);
+    expect(matches(relaxNot(tree, not), rattelse)).toBe(true);
+    // Saknar den rotavdrag träffar den inte ens utan NOT: då var det inte NOT som uteslöt den
+    expect(matches(relaxNot(tree, not), text('Rättelse om semesterlön'))).toBe(false);
   });
 });

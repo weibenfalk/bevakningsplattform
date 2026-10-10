@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX } from '../db/knex.provider';
 import { ScoreBreakdown } from '../pipeline/score';
-import { SPACES } from '../types';
+import { SPACES, Urgency } from '../types';
 import { ContentScope, ContentScopeService } from './content-scope.service';
 
 export interface ArticleQuery {
@@ -79,11 +79,18 @@ function parseSort(sort: string | undefined): { column: string; order: 'asc' | '
   return { column, order };
 }
 
-/** Texten som en fråga provas mot i `matchArchive`. Lämnar aldrig metoden. */
+/** Texten som en fråga provas mot i `matchWholeArchive`. Lämnar aldrig metoden. */
 export interface ArchiveText {
   title: string;
   /** Originaltexten, eller sammanfattningen när originaltexten är rensad. */
   body: string;
+}
+
+/** Varför en artikel inte syns för en användare. `article` är det hos artikeln som avgör, `user` det hos användarens omfång. */
+export interface HiddenReason {
+  code: 'space' | 'deny_category' | 'deny_entity' | 'deny_source' | 'allow_category' | 'allow_entity' | 'allow_source' | 'urgency' | 'unknown';
+  article: string[];
+  user: string[];
 }
 
 export interface ArchiveMatch {
@@ -91,6 +98,35 @@ export interface ArchiveMatch {
   terms: string[];
   /** Vilken text som matchades: originaltexten, eller sammanfattningen när originaltexten är rensad (efter 90 dagar). */
   textSource: 'fulltext' | 'summary';
+  /** Skulle användaren få se artikeln? Avgörs av samma villkor som all annan läsning (`scoped`). */
+  visible: boolean;
+  /** Tom när artikeln syns. */
+  hiddenReasons: HiddenReason[];
+}
+
+const overlap = (a: string[], b: string[]) => a.filter((x) => b.includes(x));
+
+/**
+ * Förklarar varför omfånget döljer en artikel. Bara en förklaring: om artikeln syns eller inte avgörs av
+ * `scoped()`, aldrig av den här funktionen. Hittar den ingen orsak för en dold artikel blir svaret `unknown`
+ * (hellre en ärlig lucka än en påhittad orsak).
+ */
+function explainHidden(scope: ContentScope, a: ArticleRow): HiddenReason[] {
+  const reasons: HiddenReason[] = [];
+  const add = (code: HiddenReason['code'], article: string[], user: string[]) => reasons.push({ code, article, user });
+  if (!overlap(a.spaces, scope.spaces).length) add('space', a.spaces, scope.spaces);
+  const deniedCategories = overlap(a.categories, scope.denyCategories);
+  if (deniedCategories.length) add('deny_category', deniedCategories, []);
+  const deniedEntities = overlap(a.entity_ids, scope.denyEntities);
+  if (deniedEntities.length) add('deny_entity', deniedEntities, []);
+  if (a.source_name !== null && scope.denySources.includes(a.source_name)) add('deny_source', [a.source_name], []);
+  if (scope.allowCategories.length && !overlap(a.categories, scope.allowCategories).length) add('allow_category', a.categories, scope.allowCategories);
+  if (scope.allowEntities.length && !overlap(a.entity_ids, scope.allowEntities).length) add('allow_entity', a.entity_ids, scope.allowEntities);
+  if (scope.allowSources.length && !(a.source_name !== null && scope.allowSources.includes(a.source_name))) {
+    add('allow_source', a.source_name === null ? [] : [a.source_name], scope.allowSources);
+  }
+  if (scope.visibleUrgencies && !scope.visibleUrgencies.includes(a.urgency as Urgency)) add('urgency', [a.urgency], scope.visibleUrgencies);
+  return reasons.length ? reasons : [{ code: 'unknown', article: [], user: [] }];
 }
 
 /** Den enda vägen in till artiklar. All läsning ska gå härigenom. */
@@ -152,33 +188,50 @@ export class ArticleAccessService {
   }
 
   /**
-   * Frågetestaren: provar en fråga mot artiklarna i användarens omfång, med samma text som profilmatchningen såg
-   * (rubrik och originaltext), eller rubrik och sammanfattning när originaltexten är rensad.
+   * Frågetestaren (admin): provar en fråga mot HELA arkivet (alla artiklar som inte är flaggade för granskning), med
+   * samma text som profilmatchningen såg (rubrik och originaltext), eller rubrik och sammanfattning när originaltexten
+   * är rensad. För varje träff anges om `userId` skulle få se artikeln, och annars varför inte.
    *
-   * Det här är den enda metod som läser originaltexten (uttalat undantag i `test/raw-text.spec.ts`: specen tillåter
+   * Den här metoden har medvetet inget användaromfång på urvalet, så den får bara anropas från kod som redan har
+   * kontrollerat att anroparen är admin (`AdminGuard`). Omfånget används bara för att märka träffarna. En redaktör
+   * skulle i en riktig version bara få träffar inom sin egen behörighet.
+   *
+   * Det är den enda metod som läser originaltexten (uttalat undantag i `test/raw-text.spec.ts`: specen tillåter
    * originaltexten för bearbetning i 90 dagar, men förbjuder att den visas eller skickas ut). Texten ges bara till
    * `match`, som svarar med de termer som träffade (eller `null`), och den ingår aldrig i det som returneras.
-   * Omfånget är detsamma som för all annan läsning.
    */
-  async matchArchive(
+  async matchWholeArchive(
     userId: string,
     match: (text: ArchiveText, row: ArticleRow) => string[] | null,
     limit = 5000,
+    /** Bara de här artiklarna (till exempel de som kom med i en körning). */
+    onlyIds?: number[],
   ): Promise<{ hits: ArchiveMatch[]; searched: number; withoutFullText: number }> {
     const scope = await this.scopes.get(userId);
-    const rows: (ArticleRow & { full_text: string | null })[] = await this.scoped(scope)
+    const rows: (ArticleRow & { full_text: string | null })[] = await this.knex('articles')
+      .where('needs_review', false)
+      .modify((q) => { if (onlyIds) q.whereIn('id', onlyIds); })
       .select([...PUBLIC_COLUMNS, 'full_text'] as unknown as string[])
       .orderBy([{ column: 'relevance', order: 'desc' }, { column: 'id', order: 'asc' }])
       .limit(limit);
 
-    const hits: ArchiveMatch[] = [];
+    const found: Omit<ArchiveMatch, 'visible' | 'hiddenReasons'>[] = [];
     let withoutFullText = 0;
     for (const { full_text: fullText, ...row } of rows) {
       const purged = !fullText;
       if (purged) withoutFullText++;
       const terms = match({ title: row.title, body: purged ? (row.summary ?? '') : fullText }, row);
-      if (terms) hits.push({ row, terms, textSource: purged ? 'summary' : 'fulltext' });
+      if (terms) found.push({ row, terms, textSource: purged ? 'summary' : 'fulltext' });
     }
+
+    // Vad användaren får se avgörs av samma villkor som all annan läsning, inte av förklaringen.
+    const visibleIds = new Set<number>(
+      found.length ? await this.scoped(scope).whereIn('id', found.map((f) => f.row.id)).pluck('id') : [],
+    );
+    const hits = found.map((f) => {
+      const visible = visibleIds.has(f.row.id);
+      return { ...f, visible, hiddenReasons: visible ? [] : explainHidden(scope, f.row) };
+    });
     return { hits, searched: rows.length, withoutFullText };
   }
 
@@ -311,6 +364,32 @@ export class ArticleAccessService {
       if (last?.profileId === r.profile_id) last.terms.push(r.term);
       else list.push({ profileId: r.profile_id, terms: [r.term] });
       result.set(r.article_id, list);
+    }
+    return result;
+  }
+
+  /**
+   * Vilka artiklar (raw_id) användarens EGNA profiler träffade: totalt (senaste versionen, inom användarens omfång),
+   * och de som sparades efter `since` (starten på den senaste profilkörningen). Artiklar, inte termer.
+   */
+  async profileMatchedArticlesForUser(userId: string, since: Date | null): Promise<Map<string, { total: string[]; sinceRun: string[] }>> {
+    const scope = await this.scopes.get(userId);
+    const rows: { profile_id: string; raw_id: string; created_at: Date }[] = await (this.knex('profile_matches as m')
+      .join('profiles as p', 'p.id', 'm.profile_id')
+      .join('articles as a', 'a.id', 'm.article_id')
+      .where('p.owner_id', userId)
+      .whereIn('m.article_id', this.scoped(scope).select('id'))
+      .whereRaw('m.profile_version = (select max(version) from profile_versions where profile_id = m.profile_id)')
+      .select('m.profile_id', 'a.raw_id')
+      .max('m.created_at as created_at')
+      .groupBy('m.profile_id', 'a.raw_id')
+      .orderBy(['m.profile_id', 'a.raw_id']) as unknown as Promise<typeof rows>);
+    const result = new Map<string, { total: string[]; sinceRun: string[] }>();
+    for (const r of rows) {
+      const entry = result.get(r.profile_id) ?? { total: [], sinceRun: [] };
+      entry.total.push(r.raw_id);
+      if (since && r.created_at >= since) entry.sinceRun.push(r.raw_id);
+      result.set(r.profile_id, entry);
     }
     return result;
   }

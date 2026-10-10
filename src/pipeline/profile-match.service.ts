@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Knex } from 'knex';
 import { ArticleAccessService } from '../access/article-access.service';
+import { CLOCK, Clock } from '../config/clock';
 import { KNEX } from '../db/knex.provider';
 import { PROFILE_FIELDS, ProfileService } from '../profiles/profile.service';
-import { Article, explain, matches } from '../query/evaluator';
+import { loadEntityNames, toQueryArticle } from '../profiles/query-article';
+import { explain, matches } from '../query/evaluator';
 import { parse } from '../query/parser';
 import { QuerySyntaxError } from '../query/tokenizer';
 import { StoredArticle } from './enrich.service';
@@ -35,15 +37,17 @@ export class ProfileMatchService {
     private readonly profiles: ProfileService,
     private readonly access: ArticleAccessService,
     private readonly runs: RunLogService,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /**
    * Steget loggas i pipeline_runs: in är antal artiklar, ut är antal sparade träffar och överhoppade är profiler
    * som inte gick att tolka.
    */
-  async run(stored: StoredArticle[]): Promise<MatchReport> {
+  async run(stored: StoredArticle[], now: Date = this.clock.now()): Promise<MatchReport> {
     return this.runs.record('profile_match', async (run) => {
-      run.set({ itemsIn: stored.length });
+      // Körningens klocka och artiklarna den gällde sparas, så att adminvyn kan visa vilken dag och vilka artiklar profilerna provades mot.
+      run.set({ itemsIn: stored.length, pipelineNow: now.toISOString(), articleIds: stored.map((s) => s.id) });
       const report = await this.match(stored);
       run.set({ itemsOut: report.rows, itemsSkipped: report.invalid.length, profilesRun: report.profilesRun });
       return report;
@@ -56,9 +60,7 @@ export class ProfileMatchService {
 
     const ids = stored.map((s) => s.id);
     const text = new Map(stored.map((s) => [s.id, s]));
-    const entityNames = new Map<string, string>(
-      (await this.knex('entities').select('id', 'name')).map((e: { id: number; name: string }) => [String(e.id), e.name]),
-    );
+    const entityNames = await loadEntityNames(this.knex);
 
     for (const profile of await this.profiles.activeProfiles()) {
       let tree;
@@ -76,15 +78,7 @@ export class ProfileMatchService {
       const rows: { profile_id: string; profile_version: number; article_id: number; term: string; score: number }[] = [];
       for (const visible of await this.access.visibleAmong(profile.ownerId, ids)) {
         const s = text.get(visible.id)!;
-        const article: Article = {
-          title: s.title,
-          body: s.body,
-          source: visible.source_name ?? undefined,
-          domain: hostOf(visible.url),
-          entity: visible.entity_ids.map((id) => entityNames.get(id)).filter((n): n is string => n !== undefined),
-          category: visible.categories,
-          area: visible.spaces,
-        };
+        const article = toQueryArticle({ title: s.title, body: s.body }, visible, entityNames);
         if (!matches(tree, article)) continue;
         // En fråga som bara har NOT-villkor har ingen träffande term. Då är frågan själv termen.
         const terms = [...new Set(explain(tree, article))];
@@ -104,13 +98,5 @@ export class ProfileMatchService {
     }
     this.log.log(`${report.profilesRun} profiler kördes mot ${stored.length} nya artiklar, ${report.rows} träffar sparade`);
     return report;
-  }
-}
-
-function hostOf(url: string): string | undefined {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return undefined;
   }
 }

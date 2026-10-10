@@ -14,11 +14,20 @@ describe('DigestService: andra källor', () => {
         url: 'https://synlig.example.se/a2' },
       { raw_id: 'a3', spaces: ['takvard'], urgency: 'info', relevance: 50, cluster_id: 'c1', source_name: 'Hemlig takvårdskälla',
         url: 'https://hemlig.example.se/a3' },
+      { raw_id: 'a5', spaces: ['fonsterputs'], urgency: 'info', relevance: 80, title: '', source_name: 'google_reviews', summary: 'Bra service', url: 'https://example.se/a5' },
       { raw_id: 'a4', spaces: ['fonsterputs'], urgency: 'info', relevance: 50, cluster_id: 'c1', source_name: 'Flaggad källa',
         url: 'https://flaggad.example.se/a4', needs_review: true },
     ]);
   });
   afterEach(closeTestingApp);
+
+  it('en artikel utan rubrik visas med källans namn, inte med en tom länk', async () => {
+    const html = await app.get(DigestService).compose('u-anna');
+    expect(html).toContain('(ingen rubrik)');
+    expect(html).toContain('Google-recensioner'); // namnet ur data/sources.json, inte id:t google_reviews
+    expect(html).not.toContain('google_reviews');
+    expect(html).not.toMatch(/<a [^>]*><\/a>/);
+  });
 
   it('visar källor inom användarens omfång', async () => {
     const html = await app.get(DigestService).compose('u-anna');

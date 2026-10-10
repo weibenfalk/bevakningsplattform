@@ -95,13 +95,16 @@ Samma sak med curl:
 ```bash
 curl -H 'x-user-id: u-mikael' http://127.0.0.1:3000/admin/users
 curl -H 'x-user-id: u-mikael' http://127.0.0.1:3000/admin/view-as/u-kalle
+curl -H 'x-user-id: u-mikael' http://127.0.0.1:3000/admin/users/u-kalle/profiles
 ```
 
 `frontend/`: `npm run typecheck` kontrollerar typerna och `npm run build` bygger. Samma varning som ovan gäller:
 identiteten är en platshållare, så starta inte servern på en adress som andra når. Varför verktyget är läs-bart och inte
 hanterar användare: se beslutsloggen (2026-10-10, adminverktyget).
 
-### Poängens uppdelning och frågetestaren
+### Profiler, poängens uppdelning och frågetestaren
+
+**Profiler.** När du väljer en användare visas hens profiler: fråga, status (giltig, eller trasig med felmeddelande och position), senaste version och vilka artiklar den träffade (raw_id), till exempel `3 träffar (r06, r16, r17)`, och om en `NOT` i frågan uteslöt en artikel (`Uteslöt d05 via NOT Rättelse`). De två trasiga profilerna (`pf-tak-pris`, `pf-puts`) hoppas över vid inläsning och sparas inte, så de läses ur `data/profiles.json`. Knappen "Testa i frågetestaren" fyller i frågan där och kör den.
 
 Varje artikel har en rad **Så räknades poängen**: de fyra delarna (påverkan, entitetsvikt, källvikt, färskhet) med värde, vikt
 och poäng, och de faktorer som gav påslag eller avdrag (akut ×1,4, trend ×1,25, uppföljning ×0,6, låg säkerhet ×0,5).
@@ -109,8 +112,10 @@ Uppdelningen sparas när poängen räknas ut (`articles.score_breakdown`) och r�
 sparades före den kolumnen saknar den, så **databasen måste skapas om** efter en uppdatering (`npm run db:down`,
 `db:up`, `migrate`, `demo`).
 
-**Frågetestaren** provar en profilfråga mot arkivet inom den valda användarens omfång. Syntaxfel visas direkt med `^` under
-positionen, annars träffarna med termen som träffade. Den matchar mot samma text som profilmatchningen såg (originaltexten), men matchningen sker på servern, inne i åtkomstmodulen, och texten returneras aldrig: bara rubrik, poäng, termer och `textSource`. Är originaltexten rensad (efter 90 dagar) matchas rubrik och sammanfattning, och svaret säger det (`textSource: "summary"`, `withoutFullText`).
+**Frågetestaren** och listan med användarens artiklar är separata sektioner med egna rubriker. Frågetestarens träffar visas direkt under fältet, med antal träffar och om varje träff syns för användaren.
+
+**Frågetestaren** provar en profilfråga mot hela arkivet (utom artiklar flaggade för granskning), bara för admin. Syntaxfel visas direkt med `^` under
+positionen. Annars visas "X träffar i arkivet, varav Y syns för Anna", och för varje träff rubrik, arbetsyta, poäng, termen och om den valda användaren skulle se artikeln, annars varför inte (fel arbetsyta, nekad kategori, nekad entitet, nekad källa, brådska m.fl.). Den matchar mot samma text som profilmatchningen såg (originaltexten), men matchningen sker på servern, inne i åtkomstmodulen, och texten returneras aldrig: bara rubrik, poäng, termer och `textSource`. Är originaltexten rensad (efter 90 dagar) matchas rubrik och sammanfattning, och svaret säger det (`textSource: "summary"`, `withoutFullText`).
 
 ```bash
 curl -H 'x-user-id: u-mikael' -H 'content-type: application/json' \
@@ -178,7 +183,7 @@ npm run typecheck
 
 ### Testfiler
 
-551 tester i 38 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+591 tester i 39 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -189,7 +194,8 @@ testdatabasen.
 | `render.spec.ts` | Mejlrendering: escapad text, bara http(s)-länkar i huvudlänk och "Även:" | 12 | nej |
 | `export.spec.ts` | Export: roll i `AuthGuard`, `?userId=` bara för admin, skydd mot CSV-formler | 14 | delvis |
 | `admin.spec.ts` | Adminverktyget: 403 för icke-admin, omfånget gäller (Anna ser aldrig takvård), ingen fulltext, profil, term och poänguppdelning per artikel | 10 | ja |
-| `admin-query.spec.ts` | Frågetestaren: syntaxfel med position, träffar med term, omfånget gäller, ingen fulltext i svaret, rensad text märks, samma träffar som pipelinen (`pf-rena`) | 15 | ja |
+| `admin-query.spec.ts` | Frågetestaren: syntaxfel med position, hela arkivet med synlighet och orsak per träff, ingen fulltext i svaret, rensad text märks, samma träffar som pipelinen för alla giltiga profiler, och en kontroll av `(Rikstak OR Takvårdarna) AND NOT pumpa*` mot en oberoende textsökning | 29 | ja |
+| `admin-profiles.spec.ts` | Användarens profiler i adminvyn: trasiga profiler med fel och position, version, träffar med raw_id, artiklar som en NOT uteslöt, bara admin, ändrar inget | 11 | ja |
 | `app.spec.ts` | Servern över HTTP: 401/403/400, admin, `PORT`, bindning till `127.0.0.1` | 10 | ja |
 | `digest.spec.ts` | Utskick: andra källor inom omfånget, tröskel och sortering före begränsning | 8 | ja |
 | `enrich.spec.ts` | Berikningen: kategori och arbetsyta ur fasta listor, fail closed, relevans, triage i pipelinen, stubben | 26 | delvis |
@@ -206,7 +212,7 @@ testdatabasen.
 | `pipeline-config.spec.ts` | Tröskeln för triage ur miljön (tom eller ogiltig ger standardvärdet, inte 0) | 2 | nej |
 | `query-tokenizer.spec.ts` | Frågespråkets tokenizer: ord, fraser, NEAR, å/ä/ö, wildcard och syntaxfel med position | 30 | nej |
 | `query-parser.spec.ts` | Frågespråkets parser: träd, prioritet, implicit AND, fält, NEAR och syntaxfel (oparad parentes m.fl.) och fält som inte stöds | 50 | nej |
-| `query-evaluator.spec.ts` | Frågespråkets utvärdering: ord, fraser, prefix, fält, NEAR, svenska regler | 31 | nej |
+| `query-evaluator.spec.ts` | Frågespråkets utvärdering: ord, fraser, prefix, fält, NEAR, svenska regler, NOT-hjälpare | 39 | nej |
 | `query-profiles.spec.ts` | Profilerna i `data/profiles.json`: de två trasiga ger fel, de giltiga träffar rätt artiklar | 9 | nej |
 | `profile-matching.spec.ts` | Profiler in (versioner, trasiga hoppas över), matchning i pipelinen, idempotens, ägarens omfång, fält som saknar data (fail closed) | 21 | ja |
 | `profile-digest.spec.ts` | "Varför: …" i mejlet: bara egna profiler och senaste version, urvalet oförändrat | 10 | delvis |

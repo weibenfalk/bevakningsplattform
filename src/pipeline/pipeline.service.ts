@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ProfileLoadReport, ProfileService } from '../profiles/profile.service';
+import { DEFAULT_PROFILES_FILE, ProfileLoadReport, ProfileService } from '../profiles/profile.service';
 import { EnrichReport, EnrichService } from './enrich.service';
 import { MatchReport, ProfileMatchService } from './profile-match.service';
 
@@ -26,9 +26,9 @@ export class PipelineService {
   ) {}
 
   async run(items: Parameters<EnrichService['run']>[0], options: PipelineOptions = {}): Promise<PipelineReport> {
-    const profiles = await this.profiles.loadFromFile(options.profilesFile ?? 'data/profiles.json');
+    const profiles = await this.profiles.loadFromFile(options.profilesFile ?? DEFAULT_PROFILES_FILE);
     const enrich = await this.enrich.run(items, options.now);
-    const matching = await this.matching.run(enrich.stored);
+    const matching = await this.matching.run(enrich.stored, options.now);
     return { profiles, enrich, matching };
   }
 }

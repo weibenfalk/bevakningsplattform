@@ -663,6 +663,7 @@ Ett skrivande steg har inget användaromfång att lägga på, och det lämnar in
 **Specen.** Originaltexten får inte visas eller skickas ut (utskick, visning, export), men får lagras för bearbetning i 90 dagar. Frågetestaren är bearbetning (samma matchning som profilmatchningen, mot arkivet) och visar ingen text. Då är det förenligt med specen att matcha mot originaltexten på servern, så länge texten aldrig lämnar servern.
 
 **Beslut:**
+_(Metoden heter numera `matchWholeArchive`, se nästa post.)_
 - `ArticleAccessService.matchArchive(userId, match)` är den enda metod som läser originaltexten ur arkivet. Den tillämpar användarens omfång som all annan läsning, ger texten (rubrik och brödtext) bara till `match`-funktionen, som svarar med de termer som träffade eller `null`, och returnerar artikelraden (utan text), termerna och varifrån texten kom. Texten ingår aldrig i det som returneras.
 - Brödtexten är originaltexten, som i pipelinen (sammanfattningen sökes alltså inte när originaltexten finns). Det är därför träffarna blir desamma som pipelinens, termer inräknade.
 - Är originaltexten rensad (efter 90 dagar, fel 35) matchas rubrik och sammanfattning. Svaret säger det på två sätt: varje träff har `textSource` (`fulltext` eller `summary`), och svaret har `searched` och `withoutFullText`, så att admin ser hur många artiklar som provades med den svagare texten. Gränssnittet skriver ut det.
@@ -673,6 +674,79 @@ Ett skrivande steg har inget användaromfång att lägga på, och det lämnar in
 **Risk och känd begränsning:** `match`-funktionen får hela texten. Den kan i princip returnera delar av den som "termer". Det hindras av typen (bara `string[]`) och av att den enda anroparen använder termer ur frågan, inte ur texten, men det är kod som måste granskas om fler anropare tillkommer. Åtkomstmodulen läser in upp till 5000 artiklar med text i minnet per anrop. Det räcker för demodatan men är inte mätt mot prestandakravet (under 2 sekunder mot 30 dagar).
 
 **Bevis:** testerna skrevs först. Första körningen: 4 röda av rätt skäl (inget `textSource`, ingen matchning mot originaltexten, pf-rena gav inte samma träffar, och regeln för `matchArchive` saknade metoden). Detektorn hittade först den lokala variabeln `rows` i stället för metoden, vilket var ett fel i testet, som jag rättade. Efter ändringen är alla 551 tester gröna. `test/admin-query.spec.ts` kör pipelinen på dag 1 och visar att frågetestaren för `pf-rena` (ägare Anna) ger exakt samma artiklar och termer som `profile_matches`, inklusive r06 och r08. Provat för hand mot demon: fem träffar för Anna, alla från originaltexten, och inget `full_text` i svaret.
+
+## 2026-10-10: Artiklar utan rubrik visas med "(ingen rubrik)" och källans namn
+
+**Fel.** Google-recensioner och Facebookinlägg har ingen rubrik i testdatan (r05, r09, r14, r15). Adminverktyget visade en tom rad, och i mejlet blev det en tom `<a>`: en osynlig länk, så artikeln gick varken att klicka på eller känna igen.
+
+**Beslut:**
+- En rubrik som är tom eller bara blanksteg visas som "(ingen rubrik)" i grått, följt av källans namn: "(ingen rubrik) · Google-recensioner". Länken behålls och har nu text. Finns rubriken visas bara den.
+- Adminverktyget har en gemensam komponent, `frontend/src/components/ArticleTitle.tsx`, som både artikelkorten och frågetestaren använder. Mejlet (`src/digest/render.ts`) är serverrenderad HTML utan React och kan inte dela komponenten, så regeln finns på två ställen (samma text och samma tröskel). Det är en avvägning: en delad regel hade krävt att mejlet renderades med React.
+- Källans namn kommer ur `data/sources.json` (`loadSourceNames`, `sourceLabel` i `src/config/sources.ts`), eftersom `articles.source_name` är id:t (`google_reviews`). En okänd källa visas med sitt id. API:et (`/admin/view-as`, `/admin/query-test`) och mejlet får fältet `source` med namnet, så gränssnittet slipper kunna källistan.
+- Källnamnet visas bara när rubriken saknas, för att inte fylla alla kort. Namnet escapas i mejlet.
+
+**Alternativ:** (a) Skriva in en ersättningsrubrik i databasen vid inläsning. Ändrar data för att lösa ett visningsproblem och döljer att källan saknar rubrik. (b) Visa källan på varje artikel. Mer brus. (c) Använda de första orden av sammanfattningen som rubrik. Gissar innehåll, och sammanfattningen kan vara tom.
+
+**Observation, inte åtgärdat:** "Även:" i mejlet (`otherSources`) skriver ut `source_name` som det står, alltså id:t (`google_reviews`) i riktig data. Det syns inte än eftersom klustring saknas (fel 29). Bör använda `sourceLabel` när klustringen byggs.
+
+**Bevis:** testerna skrevs först: 5 röda (mejlet gav en tom länk, ingen källa i mejlet eller API:et). Ett av mina egna test var för grovt (`></a>` matchar också `</span></a>`) och byttes mot en kontroll av en riktigt tom länk. Efter ändringen är alla 559 tester gröna. Gränssnittsdelen är bara byggd och typkontrollerad, inte provad i webbläsare.
+
+## 2026-10-10: Frågetestaren söker i hela arkivet och märker vad användaren skulle se
+
+**Fel i tidigare beslut.** Frågetestaren sökte bara bland den valda användarens artiklar. Specens avsnitt 6 säger att den ska visa vad en profil hade fångat i arkivet, alltså mot hela arkivet. Ett test mot användarens egna artiklar svarar på en annan fråga ("vad ser Anna som matchar?") och kan inte visa att en profil är för bred eller att en artikel faller bort på grund av behörighet.
+
+**Beslut:**
+- `ArticleAccessService.matchWholeArchive` (ersätter `matchArchive`) söker i alla artiklar som inte är flaggade för granskning, oavsett användare. Flaggade artiklar tas aldrig med, för ingen. Texten är densamma som förut: originaltexten inne i åtkomstmodulen, och rubrik och sammanfattning när den är rensad. Ingen text lämnar metoden.
+- Varje träff får `visibleToUser` och `hiddenReasons`. **Om** användaren ser artikeln avgörs av samma villkor som all annan läsning (`scoped()`, en fråga mot träffarnas id). **Varför inte** förklaras av en separat funktion (`explainHidden`): fel arbetsyta, nekad kategori, nekad entitet, nekad källa, ingen tillåten kategori, entitet eller källa, och brådska som inte syns. En orsak kan alltså aldrig få en artikel att synas eller döljas, bara förklara. Hittar förklaringen ingen orsak för en dold artikel står det "orsaken gick inte att avgöra" i stället för en påhittad orsak, och ett test (`pf-rena`) kontrollerar att det inte sker för riktiga data.
+- Svaret har `visibleCount`, och gränssnittet visar överst "X träffar i arkivet, varav Y syns för Anna". Varje träff visar rubrik (eller "ingen rubrik" och källa), arbetsyta, poäng, termen och om användaren ser den, annars orsakerna. Osynliga träffar har streckad ram. Orsakerna skrivs på svenska av servern, med källa och entitet som namn när de går att slå upp.
+- Fortfarande bara admin. Åtkomstmetoden har inget användaromfång på urvalet, så den får bara anropas av kod som redan kontrollerat admin (`AdminGuard` på hela kontrollern, och 403 för icke-admin testas). Det står i metodens kommentar.
+- Ingen fulltext i svaret: svaret har bara fälten `id`, `title`, `url`, `source`, `relevance`, `spaces`, `terms`, `textSource`, `visibleToUser` och `hiddenReasons` (testat), och ett test visar att en träff i en osynlig artikels text inte läcker texten.
+
+**Princip för en riktig version:** admin ser hela arkivet eftersom syftet är att kalibrera och felsöka behörigheten, och eftersom admin redan kan se systemet som vilken användare som helst. En redaktör ska däremot bara se träffar inom sin egen behörighet: samma metod, men med redaktörens eget omfång som filter på urvalet (som `forUser`), och utan listan över varför andra artiklar döljs. Annars blir verktyget ett sätt att läsa sig till innehåll utanför arbetsytan (titel, källa och poäng på artiklar man inte får se). Det görs inte nu eftersom redaktörsrollen inte finns (inloggningen är en platshållare, fel 18).
+
+**Alternativ:** (a) Behålla sökning i användarens omfång och lägga till ett "hela arkivet"-läge. Två lägen att förklara, och det ursprungliga läget svarar inte på spec-frågan. (b) Låta förklaringen avgöra synligheten. Då kan två implementationer av behörigheten glida isär, och det är precis felet i fel 1–2 (villkor på flera ställen). (c) Skicka bara antalet osynliga träffar och dölja dem. Då går det inte att se varför en profil missar något.
+
+**Känd begränsning:** upp till 5000 artiklar med text läses och utvärderas i minnet (inte mätt mot kravet under 2 sekunder mot 30 dagar). Orsakerna visar vad som döljer artikeln för den valda användaren, inte vad som skulle krävas för att visa den.
+
+**Bevis:** testerna skrevs först: 13 av 25 röda av rätt skäl (inget `visibleToUser`, Anna fick bara sina egna). Nya fall: en träff utanför omfånget visas med rätt orsak, sju orsaker som `test.each` mot Annas omfång (inklusive flera på en gång), samma synlighet som åtkomstmodulen, flaggade artiklar saknas för alla, 403 och 401 för icke-admin, och att `pf-rena` för Anna (hela arkivet) ger exakt pipelinens träffar bland de synliga och orsak på de dolda. Två fel i mitt eget testdata rättades (arkivet har 7 oflaggade, inte 8). Alla 568 tester är gröna. Provat i webbläsare: nej, bara byggt och typkontrollerat.
+
+## 2026-10-10: Användarens profiler i adminvyn: trasiga profiler läses ur profilfilen
+
+**Krav.** När admin väljer en användare ska hens profiler visas: id, fråga, status (giltig, eller trasig med fel och position), senaste version och antal träffade artiklar. En knapp ska fylla i frågan i frågetestaren och köra den. Läs-bart, bara admin.
+
+**Beslut:**
+- `GET /admin/users/:userId/profiles` (`ProfileService.statusFor`) bakom `AuthGuard` och `AdminGuard`. Okänd användare ger 404. Anropet skriver inget (testat: antalet rader i `profiles`, `profile_versions` och `profile_matches` är oförändrat).
+- **Trasiga profiler sparas inte.** Vid inläsning hoppas de över (fel 39–40) och finns därefter bara i profilfilen (`data/profiles.json`). För att de två trasiga ska kunna visas läser adminvyn filen och kontrollerar varje post med samma funktion som inläsningen (`checkProfile`, som inläsningen nu också använder, så att kontrollerna inte kan glida isär). Felmeddelande och position kommer därifrån. Sparade profiler som inte finns i filen visas också, och kontrolleras med `checkQuery`.
+- Statusen gäller frågan i filen. Har profilen en äldre, giltig version sparad körs den fortfarande i pipelinen. Då visas profilen som trasig med fältet `runningQuery` som anger vilken fråga som faktiskt körs. Annars hade vyn sagt "trasig" medan pipelinen fortsätter matcha med den gamla frågan.
+- Versionen är den senaste sparade (`null` för en profil som aldrig sparats).
+- Antalet träffade artiklar läses via åtkomstmodulen (`profile_matches` är en innehållstabell), för profilens senaste version och bara artiklar inom ägarens omfång, som `profileMatchesForUser`. Räknar artiklar, inte termer.
+- **Antal träffar:** vyn visar hur många artiklar profilen har träffat (totalt, för senaste versionen).
+- Gränssnittet: en sektion "Profiler" under användarvalet, med fråga i monospace, status som badge, fel och position, version och antal. Knappen "Testa i frågetestaren" fyller i frågan, kör den och scrollar dit. Den ändrar ingenting i profilen.
+
+**Alternativ:** (a) Spara överhoppade profiler med fel i en tabell vid inläsning. Mer korrekt som historik, men en ny tabell (första migrationen) och en andra sanning bredvid filen, för ett verktyg som bara läser. (b) Visa bara sparade profiler. Då syns inte de två trasiga, vilket var själva poängen. (c) Spara en körnings-id på varje träff. Rätt lösning för att räkna exakt, men ändrar datamodellen. Går att göra senare utan att vyn ändras.
+
+**Känd begränsning:** profilfilen läses relativt arbetskatalogen, som pipelinen gör (`DEFAULT_PROFILES_FILE`). Är profilen flyttad mellan ägare syns den bara hos den nya ägaren i filen.
+
+**Bevis:** `test/admin-profiles.spec.ts` skrevs först (kompilerade inte: `statusFor` fanns inte). Efter ändringen är alla 577 tester gröna. Provat i webbläsare: nej, bara byggt och typkontrollerat.
+
+## 2026-10-10: Profilvyn visar träffade artiklar och vad en NOT uteslöt, och frågetestaren kontrollerades
+
+**Krav.** (1) Profilerna ska visa vilka artiklar de träffade (raw_id), i stället för bara ett antal, och om en NOT uteslöt en artikel. (2) Frågetestaren och artikellistan ska vara tydligt separata sektioner. (3) Kontrollera att frågetestaren bara visar artiklar som frågan träffar.
+
+**Beslut:**
+- **Träffar med raw_id.** Åtkomstmodulen (`profileMatchedArticlesForUser`) returnerar raw_id för profilens senaste version, inom ägarens omfång. Texten blir `3 träffar (r06, r16, r17)`. Först visades också hur många som kom med i den senaste körningen, men det förvirrade (ett annat tal än antalet träffar frågan ger) och togs bort. Det räcker att se hur många träffar frågan ger.
+- **Vad körningen provade.** `profile_match`-körningen sparar nu `articleIds` (och pipelinens klocka, `pipelineNow`) i `pipeline_runs.details`, så att vyn vet vilka artiklar körningen gällde när den letar efter uteslutna. Listan med id:n växer med antalet nya artiklar per körning. Det är hanterbart här men värt att se över om körningarna blir stora. `pipelineNow` används inte av gränssnittet.
+- **Vad en NOT uteslöt.** För varje profil med NOT och för varje artikel i senaste körningen som ägaren får se: träffade profilen inte artikeln, men hade den träffat om just ett visst NOT-villkor togs bort (`relaxNot`), anges `uteslöt d05 via NOT Rättelse`. Kontrollen använder den fråga som pipelinen faktiskt kör (den sparade versionen). Hjälpfunktionerna `nodeText`, `notNodes` och `relaxNot` ligger i `src/query/evaluator.ts` och har egna tester. En artikel som missar av andra skäl (till exempel saknar `rotavdrag*`) räknas inte som uteslutet. Den som missar även utan NOT, eller som bara träffar om flera NOT tas bort samtidigt, rapporteras inte.
+- **En enda uppställning av artikeln för frågor.** `toQueryArticle` (`src/profiles/query-article.ts`) används nu av profilmatchningen, frågetestaren och profilvyn. Förut fanns den på två ställen, och en frågas svar ska inte kunna skilja sig beroende på var den körs. De gamla testerna för profilmatchningen är oförändrade och gröna.
+- **Sektioner.** "Frågetestare" är en egen sektion: fältet, knappen, syntaxfel, och direkt under det en separat ruta "Frågetestarens träffar" med antal träffar, hur många som syns för användaren och, per träff, om den syns (och annars varför). Listan har rubriken "Artiklar Mikael ser (21)" och en avskiljande linje. Antalet är de listade artiklarna (högst 200).
+
+**Kontroll av frågetestaren.** Den här kontrollen visade att testdatan inte nämner pumpor någonstans, så `AND NOT pumpa*` aldrig hade något att utesluta. Ett test som bara kollade att träffarna var rimliga hade gått grönt utan att NOT prövats. Testet lägger därför in två artiklar som nämner Rikstak respektive Takvårdarna tillsammans med pumpa, och jämför träffarna med en oberoende, enkel textsökning över hela arkivet (`rikstak|takvårdarna` men inte `pumpa`): exakt samma artiklar, inga andra, och alla termer är Rikstak eller Takvårdarna. Dessutom jämförs frågetestarens träffar med `profile_matches` för alla fyra giltiga profiler (tidigare bara `pf-rena`). Slutsatsen är att frågetestaren visar det frågan träffar. Det som kan förvirra är att den provar hela arkivet, inklusive artiklar användaren inte ser: de är märkta "Syns inte" med orsak, och hör inte hemma i listan "Artiklar … ser" under.
+
+**Alternativ:** (a) Spara vilka artiklar en NOT uteslöt vid matchningen (ny tabell eller kolumn). Exakt och billigt att läsa, men ändrar datamodellen och kostar vid varje körning. Beräkningen vid läsning ger samma svar för de artiklar en körning omfattade. (b) Visa alla uteslutna artiklar i arkivet, inte bara senaste körningen. Kan bli långa listor och är en fråga för frågetestaren, inte profilkortet. (c) Räkna "Dag 2" ur datumet. Hårdkodar demons kalender.
+
+**Känd begränsning:** uteslutningarna räknas på artiklarna i senaste `profile_match`-körningen och bara om körningen sparat `articleIds` (körningar före den här ändringen saknar dem, och då visas inga uteslutningar). Gränssnittet är bara byggt och typkontrollerat, inte provat i webbläsare.
+
+**Bevis:** testerna skrevs först. Första körningen: 7 röda, varav `nodeText`, `notNodes` och `relaxNot` saknades, och profilsvaret hade inte de nya fälten. Två av mina antaganden i testerna var fel (`pf-koncern` har bara en träff, och det fanns ingen pumpartikel), vilket jag rättade i testerna och inte i koden. Efter ändringen är alla 591 tester gröna.
 
 ## AI-logg
 

@@ -3,6 +3,8 @@ import { ArticleAccessService } from '../access/article-access.service';
 import { ContentScopeService } from '../access/content-scope.service';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { SOURCE_NAMES, sourceLabel } from '../config/sources';
+import { ProfileService } from '../profiles/profile.service';
 import { USER_DIRECTORY } from '../config/users';
 import { QueryTestService } from './query-test.service';
 
@@ -19,12 +21,20 @@ export class AdminController {
     private readonly access: ArticleAccessService,
     private readonly scopes: ContentScopeService,
     private readonly queryTest: QueryTestService,
+    private readonly profiles: ProfileService,
     @Inject(USER_DIRECTORY) private readonly directory: Map<string, { name: string; role: string }>,
+    @Inject(SOURCE_NAMES) private readonly sourceNames: Map<string, string>,
   ) {}
 
   @Get('users')
   async users() {
     return (await this.scopes.list()).map((s) => this.describe(s.userId, s.spaces));
+  }
+
+  /** Användarens profiler: status (giltig eller trasig med fel och position), version och antal träffade artiklar. */
+  @Get('users/:userId/profiles')
+  async userProfiles(@Param('userId') userId: string) {
+    return this.profiles.statusFor(userId);
   }
 
   @Get('view-as/:userId')
@@ -37,6 +47,7 @@ export class AdminController {
         id: a.id,
         title: a.title,
         url: a.url,
+        source: sourceLabel(this.sourceNames, a.source_name),
         relevance: a.relevance,
         scoreBreakdown: a.score_breakdown,
         urgency: a.urgency,
