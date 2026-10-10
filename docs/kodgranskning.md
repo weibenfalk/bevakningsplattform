@@ -9,8 +9,8 @@ Fel 1–11 var de kända felen i `test/kanda-fel`, som nu är borttagen. Testern
 
 | Fel | Beskrivning | Grad | Status | Test som bevisar det | Beslut |
 |---|---|---|---|---|---|
-| 1 | Akuta nyheter går förbi arbetsytan (`orWhere`) | K | rättat | `test/access.spec.ts`: "en akut takvårdsnyhet når inte en användare som bara har fönsterputs" | "Fel 1 – akuta nyheter går förbi arbetsytan" |
-| 2 | Nekad entitet och sökfilter gäller bara akutgrenen (samma rot som fel 1) | K | rättat | `test/access.spec.ts`: "en nekad entitet döljs även för artiklar inom användarens arbetsyta" | "Fel 1 – akuta nyheter går förbi arbetsytan" |
+| 1 | Akuta nyheter går förbi arbetsytan (`orWhere`) | K | rättat | `test/access.spec.ts`: "en akut takvårdsnyhet når inte en användare som bara har fönsterputs" | "Fel 1 och 2 – akuta nyheter går förbi arbetsytan, och nekade entiteter gäller bara akutgrenen" |
+| 2 | Nekad entitet och sökfilter gäller bara akutgrenen (samma rot som fel 1) | K | rättat | `test/access.spec.ts`: "en nekad entitet döljs även för artiklar inom användarens arbetsyta" | "Fel 1 och 2 – akuta nyheter går förbi arbetsytan, och nekade entiteter gäller bara akutgrenen" |
 | 3 | `select('*')` lämnar ut `full_text` | K | rättat | `test/access.spec.ts`: "åtkomstmodulen lämnar aldrig ut fulltexten" | "Fel 3 – fulltext lämnar åtkomstmodulen, och sort är en vitlista" |
 | 3b | SQL-injektion via `sort` (`orderByRaw`) | K | rättat | `test/access.spec.ts`: "sort tar bara emot vitlistade kolumner (SQL-injektion via sort)" | "Fel 3 – fulltext lämnar åtkomstmodulen, och sort är en vitlista" |
 | 4 | Artikel utan affärsområde får standardvärdet takvard + fonsterputs och når alla | K | rättat | `test/enrich.spec.ts`: "ett AI-svar utan giltig arbetsyta publiceras inte, utan sparas flaggad för granskning", plus `test/access.spec.ts`: "en artikel flaggad för granskning visas aldrig, även om arbetsytan stämmer" | "Fel 4 – ett AI-svar utan giltig arbetsyta publiceras inte (fail closed)" |

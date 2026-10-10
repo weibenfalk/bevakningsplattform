@@ -20,15 +20,17 @@
 
 `npm audit --omit=dev` ger 0 sårbarheter. De varningar som finns gäller Jests egna verktyg för testtäckning, inte applikationen.
 
-## 2026-10-09: Fel 1 – akuta nyheter går förbi arbetsytan
+## 2026-10-09: Fel 1 och 2 – akuta nyheter går förbi arbetsytan, och nekade entiteter gäller bara akutgrenen
 
 **Beslut:** Arbetsytan är en hård gräns, även för akuta händelser. Det är ett krav i specen och inget antagande: avsnitt 2 säger "arbetsytor (hård gräns)" och "Omfånget gäller överallt: sök, arkiv, export, API, utskick och förhandsgranskning." `orWhere('urgency', 'akut')` är borttagen i `ArticleAccessService`.
 **Alternativ:** (a) Behålla en bypass för akuta nyheter men begränsa den till användare med rätt roll. (b) Låta akuta nyheter gå igenom men dölja `full_text`. Båda strider mot specens krav att omfånget gäller överallt, och risken är redan inträffad: Anna fick en konkursnyhet om takvård.
-**Varför:** `orWhere` gjorde att `urgency = 'akut'` räckte ensamt. Det förbigick också nekade entiteter och sökfiltret, eftersom AND binder hårdare än OR. Därför blev fel 2 grönt av samma ändring.
+**Varför:** `orWhere` gjorde att `urgency = 'akut'` räckte ensamt.
+**Fel 2 (samma rot):** Frågan blev `spaces && … OR urgency = 'akut'`, och filtren som lades till efter det (nekade entiteter, sökfiltret) kopplades med AND. AND binder hårdare än OR, så de gällde bara den sista grenen, de akuta artiklarna, och inte den vanliga grenen. En användare med en nekad entitet kunde alltså fortfarande se artiklar om den inom sin egen arbetsyta, och sökfiltret filtrerade inte som det skulle. Det blev ett eget fel och inte bara en följd av fel 1, eftersom det visade sig även för icke-akuta artiklar.
+**Beslut för fel 2:** Inget eget beslut behövdes. När `orWhere` är borta finns det bara en gren, och alla filter gäller den. Jag valde medvetet att inte lägga till parenteser runt OR-grenen för att "laga" prioriteten, eftersom det hade bevarat bypassen. Rotorsaken är OR-grenen, och bara den ska bort. Fel 2 fick ändå ett eget test, så att det inte kan återkomma om någon senare bygger om frågan.
 **Troligt ursprung till felet:** Den ärvda koden blandade troligen ihop två meningar i specen. Avsnitt 7 säger att "Akuta händelser kan skickas utanför schemat", och det gäller *en annan tid*: ett akut larm behöver inte vänta på nästa utgåva. Koden tolkade det som att akuta händelser också skulle nå *utanför behörigheten*, alltså fler personer. Det är två olika saker. Tiden får avvika från schemat, men mottagarna bestäms alltid av omfånget. Ett akut larm till Anna ska fortfarande bara innehålla det hon får se.
 **Kvarstår:** Utskick utanför schemat finns inte (larmmotorn är medvetet bortvald). När den byggs ska den skicka till mottagare ur `ArticleAccessService`, inte runt den.
 Rättningen är medvetet minimal: fel 3 (`select('*')`) och SQL-injektionen via `sort` ligger i samma fil men tas som egna steg med egna tester.
-**Bevis:** Fel 1 och 2 gick från rött till grönt och är flyttade till `test/access.spec.ts`.
+**Bevis:** Fel 1 och 2 gick från rött till grönt var för sig (`test/access.spec.ts`: "en akut takvårdsnyhet når inte en användare som bara har fönsterputs" och "en nekad entitet döljs även för artiklar inom användarens arbetsyta"). Fel 2-testet blev grönt av ändringen för fel 1, men det är ett eget test eftersom det kontrollerar ett eget beteende.
 
 ## 2026-10-09: Fel 3 – fulltext lämnar åtkomstmodulen, och sort är en vitlista
 
