@@ -9,12 +9,13 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 ## Status
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
-- `npm test`: 506 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
+- `npm test`: 513 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
 - De 11 kända felen är rättade, liksom flera fel som hittades vid granskningen (se statustabellen överst i `docs/kodgranskning.md`, som också visar vad som återstår). Före-läget med alla 11 som röda tester finns i git-historiken (commit `8cb6c87`, `test/kanda-fel/kanda-fel.spec.ts`).
 - Incidenten, pipelinebuggarna (plan 1 och 2) och dedupe/idempotens är gjorda. Hela datamodellen (krav 2) ligger i den första migrationen, men tabellerna för behörighet, profiler och utskick används inte av koden än (`content_scopes` styr omfånget, med arbetsyta, tillåtna och nekade kategorier, källor och entiteter samt högsta brådska).
 - Frågespråket (plan 3) är byggt i `src/query/` (tokenizer, parser, utvärdering) och inkopplat: `PipelineService` läser in profilerna, berikar och matchar profilerna mot de nya artiklarna (`profile_matches`). Mejlet visar "Varför: …" för användarens egna profiler. Profilerna filtrerar **inte** urvalet (se beslutsloggen).
 - Dag 2 är gjord: `d01` är en dubblett, `d02` uppdaterar `r02` (ny text och poäng, uppföljning, skickas inte igen), `d05` är en rättelse som alltid är med. Utskicken sparas i `editions`, `deliveries` och `delivery_items` (`DigestService.send`).
 - Rensning efter 90 dagar (fel 35) är gjord: `npm run purge` nollar `articles.full_text` och tömmer `skipped_items.payload`, räknat mot den fasta klockan (artiklar och råposter har `created_at` satt av klockan), och loggas i `pipeline_runs`.
+- Trendfaktorn (fel 21 och 26) är inkopplad: minst 3 unika artiklar om samma entitet de senaste 30 dygnen på `published_at` ger ×1,25 (`TrendService`, `test/trend.spec.ts`).
 - Kvar: matchning mot arkivet (frågetestaren), `ÖVERLÄMNING.md` och slutversionen av `TIDSLOGG.md` och beslutsloggen (plan 4). Äkta autentisering saknas (`AuthGuard` är en platshållare).
 - `npm run demo` (och `-- --trasig-ai`) visar läckorna per användare och skriver mejlförhandsvisningar till `out/`.
 - Hela kodgranskningen finns i `docs/kodgranskning.md`. Läs den innan du ändrar i `src/`.

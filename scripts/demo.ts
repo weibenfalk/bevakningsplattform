@@ -17,6 +17,8 @@ import { DigestService } from '../src/digest/digest.service';
 import { EntityImportService } from '../src/import/entity-import.service';
 import { LLM, LlmProvider } from '../src/llm/llm.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
+import { relevance } from '../src/pipeline/score';
+import { loadSourceWeights } from '../src/config/sources';
 import { PipelineService } from '../src/pipeline/pipeline.service';
 import { RunLogService } from '../src/pipeline/run-log.service';
 import type { PipelineRun } from '../src/pipeline/run-log.service';
@@ -26,6 +28,7 @@ const brokenAi = process.argv.includes('--trasig-ai');
 
 /** Körningarnas klocka (CLAUDE.md): dag 1 = 2026-10-01 07:00, dag 2 = 2026-10-03 07:00. */
 const DAG1 = new Date('2026-10-01T07:00:00+02:00');
+const pipelineWeights = loadSourceWeights();
 const DAG2 = new Date('2026-10-03T07:00:00+02:00');
 
 /** En AI som svarar med text i stället för JSON. */
@@ -154,6 +157,16 @@ async function main() {
     console.log(`   ${u.rawId} uppdaterade ${u.existingRawId}: ny text, poäng ${r02Before.relevance} -> ${now.relevance}, markerad som uppföljning`);
     console.log(`     (poängen har faktorn 0,60 eftersom ${u.existingRawId} redan skickats till ${sentTo.map((id) => users.find((x) => x.id === id)?.name ?? id).join(' och ')})`);
   }
+  // Trend (fel 21 och 26): minst 3 unika artiklar om samma entitet de senaste 30 dygnen ger faktorn ×1,25.
+  const rikstak = await knex('entities').where('name', 'like', 'Rikstak%').first();
+  const rikstakArtiklar = await knex('articles').whereRaw('entity_ids @> ARRAY[?]::text[]', [String(rikstak.id)]).orderBy('published_at');
+  const d04 = rikstakArtiklar.find((a: { raw_id: string }) => a.raw_id === 'd04');
+  const utanTrend = d04 && relevance(
+    { impact: d04.impact, confidence: d04.confidence, urgency: d04.urgency, sourceWeight: pipelineWeights.get('di') ?? 0, publishedAt: d04.published_at.toISOString(), entities: [{ id: String(rikstak.id), watchLevel: 'critical' }], isTrending: false, isFollowUp: d04.is_followup },
+    DAG2,
+  );
+  console.log(`   Trend: Rikstak har ${rikstakArtiklar.length} unika artiklar (${rikstakArtiklar.map((a: { raw_id: string }) => a.raw_id).join(', ')}) de senaste 30 dygnen`);
+  if (d04) console.log(`     d04 ger trend: poäng ${utanTrend} utan faktorn -> ${d04.relevance} med ×1,25`);
   console.log(`   Profilmatchning: ${day2.matching.profilesRun} profiler kördes mot ${day2.enrich.stored.length} nya eller uppdaterade artiklar, ${day2.matching.rows} träffar sparade`);
   printRuns((await app.get(RunLogService).list()).slice(runsBefore));
 

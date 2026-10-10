@@ -209,15 +209,18 @@ export class ArticleAccessService {
   }
 
   /**
-   * Antal träffar för en entitet sedan en viss tid, för trendberäkningen. Medvetet utan användaromfång: det är en
-   * siffra över hela systemet och ingen artikel lämnar modulen.
+   * Antal UNIKA artiklar som nämner en entitet och publicerades i fönstret (`since` till `until`), för trendberäkningen.
+   * Räknar artiklar (en rad per artikel i `articles`), inte träffrader, och på publiceringstiden, inte på när raden
+   * sparades. Artikeln `excludeArticleId` räknas inte (en uppdatering ska inte räkna sig själv). Medvetet utan
+   * användaromfång: det är en siffra över hela systemet och ingen artikel lämnar modulen.
    */
-  async countEntityMatches(entityId: string, since: Date): Promise<number> {
-    const row = await this.knex('entity_matches')
-      .where('entity_id', entityId)
-      .andWhere('created_at', '>=', since)
-      .count<{ count: string }>('* as count')
-      .first();
+  async countArticlesAboutEntity(entityId: string, since: Date, until: Date, excludeArticleId?: number): Promise<number> {
+    const query = this.knex('articles')
+      .whereRaw('entity_ids @> ARRAY[?]::text[]', [entityId])
+      .andWhere('published_at', '>=', since)
+      .andWhere('published_at', '<=', until);
+    if (excludeArticleId !== undefined) query.whereNot('id', excludeArticleId);
+    const row = await query.count<{ count: string }>('* as count').first();
     return Number(row?.count ?? 0);
   }
 

@@ -2,9 +2,9 @@
 
 1 h
 
-# Felrättningar och fix
+# Felrättningar, features och fix
 
-3.5 h
+4.5 h (mycket väntetid på Claude =)
 
 # Förstå kod, granska och rätta AI
 

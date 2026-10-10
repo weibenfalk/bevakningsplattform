@@ -15,6 +15,7 @@ import { isCorrection } from './correction';
 import { prepareItem } from './ingest';
 import { normalizeUrl } from './normalize-url';
 import { RunLogService } from './run-log.service';
+import { TrendService } from './trend.service';
 import { TriageService } from './triage.service';
 
 const SYSTEM_PROMPT = `Du analyserar nyhetstexter åt en svensk koncern inom takvård och fönsterputs.
@@ -53,6 +54,7 @@ export class EnrichService {
     @Inject(SOURCE_WEIGHTS) private readonly sourceWeights: Map<string, number>,
     private readonly access: ArticleAccessService,
     private readonly runs: RunLogService,
+    private readonly trends: TrendService,
   ) {}
 
   async run(items: RawItem[], now: Date = this.clock.now()): Promise<EnrichReport> {
@@ -158,7 +160,7 @@ export class EnrichService {
   }
 
   /** Låter AI:n berika en post och räknar ut poängen. Gemensamt för nya poster och uppdateringar. */
-  private async analyse(item: RawItem, entities: Entity[], now: Date, problems: string[], isFollowUp: boolean) {
+  private async analyse(item: RawItem, entities: Entity[], now: Date, problems: string[], isFollowUp: boolean, articleId?: number) {
     const raw = await this.llm.complete({
       task: 'enrich',
       system: SYSTEM_PROMPT,
@@ -176,7 +178,8 @@ export class EnrichService {
     const entityMatches = parsed.success
       ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
       : [];
-    const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems, isFollowUp);
+    const isTrending = await this.trends.isTrending(entityMatches, item.published_at || null, now, articleId);
+    const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems, isFollowUp, isTrending);
     return { data, entityMatches, score, reviewReason };
   }
 
@@ -191,7 +194,7 @@ export class EnrichService {
   private async applyUpdate(update: Update, entities: Entity[], now: Date, problems: string[]): Promise<StoredArticle | null> {
     const item = update.entry.prepared;
     const wasSent = (await this.access.sentToAnyone([update.articleId])).has(update.articleId);
-    const { data, entityMatches, score, reviewReason } = await this.analyse(item, entities, now, problems, wasSent);
+    const { data, entityMatches, score, reviewReason } = await this.analyse(item, entities, now, problems, wasSent, update.articleId);
     if (reviewReason !== null || data.summary === null) return null;
 
     await this.knex('articles')
@@ -230,7 +233,7 @@ export class EnrichService {
 
   /**
    * Relevans enligt score.ts. Uppföljningsfaktorn gäller uppdateringar av artiklar som redan skickats. Trendfaktorn
-   * är inte inkopplad än, och uppföljning av en story från en annan källa kräver klustring (känd begränsning).
+   * (×1,25) gäller när en entitet har minst 3 unika artiklar de senaste 30 dygnen, och uppföljning av en story från en annan källa kräver klustring (känd begränsning).
    * Det som inte går att poängsätta (okänd källa, ogiltigt datum) ger ingen poäng och flaggas för granskning.
    */
   private score(
@@ -242,6 +245,7 @@ export class EnrichService {
     valid: boolean,
     problems: string[],
     isFollowUp: boolean,
+    isTrending: boolean,
   ): { score: number | null; reviewReason: string | null } {
     if (!valid) return { score: null, reviewReason: 'Ogiltigt AI-svar (arbetsyta eller annat fält)' };
 
@@ -259,7 +263,7 @@ export class EnrichService {
         // Färskheten räknas från den senaste versionen: en uppdatering är nyare än första publiceringen.
         publishedAt: item.updated_at || item.published_at,
         entities: entities.filter((e) => matchedIds.includes(e.id)).map((e) => ({ id: e.id, watchLevel: e.watchLevel })),
-        isTrending: false,
+        isTrending,
         isFollowUp,
       },
       now,
