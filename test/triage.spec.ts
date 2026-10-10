@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { pipelineConfig } from '../src/config/pipeline.config';
 import { LlmProvider } from '../src/llm/llm.provider';
 import { TriageService } from '../src/pipeline/triage.service';
@@ -23,12 +24,19 @@ const MIN = pipelineConfig.triage.minScore;
 describe('TriageService', () => {
   const items = [item('a'), item('b'), item('c')];
 
+  // Varningen kontrolleras i stället för att skrivas ut.
+  let warn: jest.SpyInstance;
+  beforeEach(() => { warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined); });
+  afterEach(() => warn.mockRestore());
+  const warnings = () => warn.mock.calls.map(([message]) => String(message));
+
   it('släpper bara igenom artiklar med poäng över tröskeln', async () => {
     const { llm } = answering(JSON.stringify([MIN + 30, MIN - 1, MIN]));
     const result = await new TriageService(llm).filter(items);
     expect(ids(result.kept)).toEqual(['a', 'c']);
     expect(ids(result.dropped)).toEqual(['b']);
     expect(result.unscored).toEqual([]);
+    expect(warn).not.toHaveBeenCalled(); // inget att varna för när allt har en giltig poäng
   });
 
   it('tröskeln gallrar: standardvärdet är över noll', () => {
@@ -46,6 +54,8 @@ describe('TriageService', () => {
     const result = await new TriageService(llm).filter(items);
     expect(result.kept).toEqual([]);
     expect(ids(result.unscored)).toEqual(['a', 'b', 'c']);
+    // Artiklar som inte går vidare ska synas i loggen, med id, och inte försvinna tyst.
+    expect(warnings()).toEqual(['3 av 3 fick ingen giltig poäng och går inte vidare: a, b, c']);
   });
 
   it('ogiltiga poster i en annars giltig lista släpps inte igenom, men de giltiga bedöms ändå', async () => {
@@ -53,6 +63,7 @@ describe('TriageService', () => {
     const result = await new TriageService(llm).filter(items);
     expect(ids(result.kept)).toEqual(['a']);
     expect(ids(result.unscored)).toEqual(['b', 'c']);
+    expect(warnings()).toEqual(['2 av 3 fick ingen giltig poäng och går inte vidare: b, c']);
   });
 
   it.each([[150], [-5], [Number.NaN], ['90']])('poängen %p är ogiltig', async (bad) => {
@@ -60,6 +71,7 @@ describe('TriageService', () => {
     const result = await new TriageService(llm).filter(items);
     expect(ids(result.unscored)).toEqual(['a']);
     expect(ids(result.kept)).toEqual(['b', 'c']);
+    expect(warnings()).toEqual(['1 av 3 fick ingen giltig poäng och går inte vidare: a']);
   });
 
   it('klarar kodstaket runt JSON-svaret (extractJson)', async () => {
@@ -84,6 +96,8 @@ describe('TriageService', () => {
     const result = await new TriageService(llm).filter(many);
     expect(result.unscored).toHaveLength(20);
     expect(result.kept).toHaveLength(5);
+    expect(warnings()).toHaveLength(1);
+    expect(warnings()[0]).toMatch(/^20 av 25 fick ingen giltig poäng/);
   });
 
   it('avgränsar artikeltexten som data och låter den inte stänga avgränsningen (promptinjektion, r19)', async () => {

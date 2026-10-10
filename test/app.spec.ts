@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX } from '../src/db/knex.provider';
 import { bootstrap, DEFAULT_HOST, DEFAULT_PORT, parsePort } from '../src/main';
-import { closeTestingApp, createTestingApp, seedArticles } from './helpers';
+import { closeTestingApp, createTestingApp, seedArticles, TEST_LOGGER } from './helpers';
 
 describe('parsePort', () => {
   it('använder 3000 när PORT saknas, är tom eller inte är ett giltigt portnummer', () => {
@@ -29,7 +29,7 @@ describe('Appen startar och exporten fungerar över HTTP', () => {
       { raw_id: 'f1', spaces: ['fonsterputs'], urgency: 'info', title: 'Fönsternyhet' },
       { raw_id: 'f2', spaces: ['fonsterputs'], urgency: 'info', title: '=HYPERLINK("http://ond.example","klicka")' },
     ]);
-    server = await bootstrap({ port: 0, logger: false });
+    server = await bootstrap({ port: 0, logger: TEST_LOGGER });
     base = `http://127.0.0.1:${(server.getHttpServer().address() as AddressInfo).port}`;
   });
   afterAll(async () => {

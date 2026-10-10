@@ -84,7 +84,6 @@ Artiklarna flaggas då för granskning och publiceras inte, och originaltexten a
 ```bash
 npm run db:up            # Postgres måste vara igång
 npm test                 # hela sviten
-npm run test:kanda-fel   # kända fel som ännu inte är rättade (just nu inga)
 npm run typecheck
 ```
 
@@ -98,6 +97,8 @@ inte köra `npm run migrate` för testerna.
   annars köra, eftersom de tömmer tabellerna (`test/test-database.ts`).
 - Serverns `DATABASE_URL` räknas aldrig för testerna, eftersom den kan peka på en databas som inte får tömmas.
 - `npm run db:down` tar bort båda databaserna.
+- Loggen är tyst i testerna (trasiga svar testas med flit). `TEST_LOGS=1 npm test` visar den när något felsöks.
+  Produktionen och demon loggar som vanligt.
 
 ## Struktur
 

@@ -10,14 +10,14 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
 - `npm test`: de ärvda testerna, gröna (de testar fel saker).
-- `npm run test:kanda-fel`: tester för kända fel som ännu inte är rättade (röda tills de rättas). Just nu finns inga, eftersom alla 11 är rättade och flyttade till `test/`. Se statustabellen överst i `docs/kodgranskning.md` för vad som återstår.
+- De 11 kända felen är rättade och testerna ligger i den vanliga sviten (`test/`). Före-läget, med alla 11 som röda tester, finns i git-historiken (commit `8cb6c87`, `test/kanda-fel/kanda-fel.spec.ts`). Se statustabellen överst i `docs/kodgranskning.md` för vad som återstår.
 - `npm run demo` (och `-- --trasig-ai`) visar läckorna per användare och skriver mejlförhandsvisningar till `out/`.
 - Hela kodgranskningen finns i `docs/kodgranskning.md`. Läs den innan du ändrar i `src/`.
 
 ## Arbetsregler
 
-1. **Rätta med test först.** Varje rättning ska få ett test i `test/kanda-fel/` att gå från rött till grönt. Flytta sedan
-   testet till den vanliga sviten (`test/`).
+1. **Rätta med test först.** Skriv testet i den vanliga sviten (`test/`), kör det och se att det är rött av rätt skäl,
+   rätta, och se det bli grönt. Visa båda körningarna.
 2. **Uppdatera `docs/beslutslogg.md`** vid varje viktigt beslut: datum, alternativ och varför.
 3. **AI-logg** (sist i beslutsloggen): notera när AI:n hjälpte och när den hade fel. Uppgiften kräver 3–5 exempel, varav minst ett fel.
 4. **Kontrollera paketversioner** med `npm view <paket> version` innan du lägger till ett beroende. Gissa aldrig ur minnet
@@ -73,6 +73,5 @@ npm install && npm run db:up && npm run migrate
 npm run demo
 npm start                # servern på 127.0.0.1:3000 (PORT, HOST, DATABASE_URL, ADMIN_USER_IDS)
 npm test
-npm run test:kanda-fel
 npm run typecheck
 ```

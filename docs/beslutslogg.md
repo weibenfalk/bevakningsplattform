@@ -234,9 +234,12 @@ Fail closed fungerade som tänkt: osäkra artiklar nådde ingen i stället för 
 **Nästa steg i överlämningen (i ordning):** (1) Bygg klustringen: sätt `cluster_id` vid berikning genom att jämföra mot artiklar de senaste dygnen. (2) Skaffa märkt data, till exempel par av nyheter som en redaktör har markerat som samma eller olika story, och kalibrera tröskeln så att felaktiga sammanslagningar blir under 2 %. (3) Byt stubben mot en riktig embeddingmodell innan kalibreringen, eftersom tröskeln beror på modellen.
 **Bevis:** Sju av nio tester i `test/similarity.spec.ts` var röda och blev gröna. Fel 11-testet flyttades dit från `test/kanda-fel`.
 
-## 2026-10-09: Inga kända fel kvar i `test/kanda-fel`
+## 2026-10-09: `test/kanda-fel` är borttagen
 
-**Beslut:** `test/kanda-fel/kanda-fel.spec.ts` är borttagen, eftersom alla elva kända fel är rättade och flyttade till den vanliga sviten. `npm run test:kanda-fel` kör med `--passWithNoTests` och är grönt när mappen är tom. Nya kända fel som upptäcks senare ska få sitt röda test där först (regel 1 i `CLAUDE.md`).
+**Beslut:** Alla 11 kända fel är rättade, och alla tester från `test/kanda-fel/kanda-fel.spec.ts` har flyttats till den vanliga sviten. Mappen och skriptet `npm run test:kanda-fel` är borttagna, och `npm test` behöver inte längre utesluta mappen. README och `CLAUDE.md` är uppdaterade. Regel 1 i `CLAUDE.md` säger nu att nya tester skrivs direkt i `test/`, ses rödas av rätt skäl och sedan blir gröna.
+**Före-läget syns i git-historiken.** Commit `8cb6c87` ("Gör den ärvda koden körbar …") innehåller `test/kanda-fel/kanda-fel.spec.ts` med alla 11 testerna (fel 1–11) som röda. Det går att checka ut den commiten och köra `npm run test:kanda-fel` för att se felen före rättningarna. Rättningarna ligger i commits efter den.
+**Alternativ:** Behålla en tom mapp med `--passWithNoTests`. Det gav ett skript som alltid är grönt och inte säger något, och en mapp som antyder att det finns kända fel.
+**Var testerna ligger nu:** `test/access.spec.ts` (fel 1–3 och 12), `test/enrich.spec.ts` (fel 4, 5), `test/render.spec.ts` (fel 6, 7), `test/normalize-url.spec.ts` (fel 8), `test/entity-matcher.spec.ts` (fel 9, 10), `test/similarity.spec.ts` (fel 11). Statustabellen i `docs/kodgranskning.md` pekar på varje test.
 
 ## 2026-10-09: Dubbletter och idempotens – den normaliserade URL:en är identiteten
 
@@ -296,6 +299,13 @@ Det är samma princip som specen kräver för trösklarna (kalibrering mot märk
 **Alternativ:** (a) Ett annat schema i samma databas. Då delar demon och testerna fortfarande databas och anslutning, och skyddet blir svagare, eftersom det inte går att avgöra på namnet att databasen är för test. (b) En separat Docker-container för tester. Mer att starta och hålla igång för en vinst som en databas på samma server redan ger. (c) Transaktioner som rullas tillbaka efter varje test. Det kräver att all kod delar en och samma anslutning, vilket inte stämmer för appens poolade anslutningar.
 **Följdändring:** Testet som skulle återskapa `npm start` utan `DATABASE_URL` (se webbserverposten) raderade variabeln, och servern föll då tillbaka på utvecklingsdatabasen i stället för testdatabasen. Det testet är i stället ett enhetstest av att `knexProvider` får sin anslutning ur `resolveDatabaseUrl`.
 **Bevis:** Sex tester i `test/test-database.spec.ts`. Manuellt: demon gav 21 artiklar i `bevakning`, `npm test` (188 tester) lämnade dem orörda, databasen skapades från noll efter `drop database`, och med Postgres nedstängd gav `npm test` felet "Är databasen igång? Kör: npm run db:up".
+
+## 2026-10-10: Tyst logg i testerna, och varningar som kontrolleras
+
+**Problem:** `npm test` skrev ut elva `WARN`-rader från `TriageService`, från testerna som med flit skickar trasiga svar. Skräp i utskriften gör att en riktig varning inte syns.
+**Beslut:** Nests logg är tyst i testerna (`test/jest.env.ts` och `TEST_LOGGER` i `test/helpers.ts`). `TEST_LOGS=1` slår på den för felsökning. Produktionen och demon påverkas inte, eftersom inställningen bara finns i testernas uppsättning. Testerna som bryr sig om en varning spionerar på `Logger.prototype.warn` och **kontrollerar** att den loggas, med rätt antal och rätta id, i stället för att läsa den i utskriften. Logiken att artiklar utan giltig poäng alltid ska synas i loggen (se triage-beslutet) skyddas därmed av tester och inte av att någon råkar se den.
+**Alternativ:** (a) Bara tysta utan att kontrollera. Då kunde varningen tas bort utan att något test märkte det. (b) Tysta i varje testfil. Då glöms det i nästa. (c) Filtrera utskriften i `npm test`-skriptet. Det döljer problemet bara i den raden.
+**Bevis:** `npm test` skriver ut 0 loggrader (tidigare 11). Genom att tillfälligt ta bort varningen ur `TriageService` blev 11 tester röda, så de fångar en saknad logg. `TEST_LOGS=1` visar 13 varningar i `test/dedupe.spec.ts`.
 
 ## AI-logg
 

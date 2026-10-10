@@ -5,7 +5,7 @@
 Uppdateras varje gång ett fel rättas (se Arbetsregler i `CLAUDE.md`). Status: **rättat**, **kvar** eller
 **medvetet bortvalt** (dokumenteras då som nästa steg i `ÖVERLÄMNING.md`). Allvarlighetsgrad enligt nedan:
 K = kritisk, H = hög, M = medel. Beslut hänvisar till avsnittsrubriken i `docs/beslutslogg.md`.
-Fel 1–11 är de kända felen i `test/kanda-fel`. Tester för rättade fel har flyttats till den vanliga sviten. De som har bokstav eller nummer över 11 hittades på vägen.
+Fel 1–11 var de kända felen i `test/kanda-fel`, som nu är borttagen. Testerna ligger i den vanliga sviten, och före-läget (11 röda tester) finns i git-historiken (commit `8cb6c87`). De som har bokstav eller nummer över 11 hittades på vägen.
 
 | Fel | Beskrivning | Grad | Status | Test som bevisar det | Beslut |
 |---|---|---|---|---|---|
@@ -60,7 +60,7 @@ Fynd i "Fynd per fil" som ännu **inte** har en rad i tabellen: att `ContentScop
 
 Bedömd som om den gick i produktion. Allvarlighetsgrad: **K** = kritisk (läcker data eller är ett säkerhetshål),
 **H** = hög (ger fel resultat), **M** = medel.
-Tester för rättade fel ligger i den vanliga sviten, och de som återstår ligger i `test/kanda-fel/kanda-fel.spec.ts`.
+Tester för rättade fel ligger i den vanliga sviten (`test/`). Fel som återstår saknar test tills de tas (regel 1 i `CLAUDE.md`).
 
 ## Incidenten: varför Anna fick en konkursnyhet om takvård med hela artikeln
 

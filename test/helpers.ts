@@ -19,6 +19,9 @@ let app: INestApplicationContext | undefined;
 // Stäng appen (och databaspoolen) efter varje testfil, så att originaltesterna kan stå orörda.
 afterAll(() => closeTestingApp());
 
+/** Tyst som standard. `TEST_LOGS=1` visar loggen när något felsöks. */
+export const TEST_LOGGER: false | ('log' | 'warn' | 'error')[] = process.env.TEST_LOGS ? ['log', 'warn', 'error'] : false;
+
 export async function createTestingApp(): Promise<INestApplicationContext> {
   // Före allt annat: vi tömmer tabellerna, så vi vägrar köra mot något som inte är en testdatabas.
   assertTestDatabase(process.env.DATABASE_URL);
@@ -31,7 +34,7 @@ export async function createTestingApp(): Promise<INestApplicationContext> {
   await knex('content_scopes').insert(users.map((u) => ({ user_id: u.id, spaces: u.scopes })));
   await knex.destroy();
 
-  app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  app = await NestFactory.createApplicationContext(AppModule, { logger: TEST_LOGGER });
   return app;
 }
 
