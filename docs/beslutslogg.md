@@ -565,6 +565,28 @@ Ett skrivande steg har inget användaromfång att lägga på, och det lämnar in
 
 **Bevis:** `test/trend.spec.ts` skrevs först. Första körningen: 2 av 7 röda av rätt skäl (trendfallen fick 79 i stället för 99, alltså ingen faktor). De fem nej-fallen var redan gröna, eftersom faktorn aldrig användes, och skyddar mot att den överdrivs. Efter ändringen: 7 av 7 gröna, hela sviten 513, `tsc --noEmit` utan fel. `npm run demo`, dag 2: "Trend: Rikstak har 5 unika artiklar (r13, r05, r04, r19, d04) … d04 ger trend: poäng 75 utan faktorn -> 94 med ×1,25".
 
+## 2026-10-10: Trenden räknar bara källor med vikt minst 1,0
+
+**Fel.** Trendfaktorn (×1,25) räknade alla artiklar om en entitet, oavsett källa. Rikstak hade 5 artiklar i fönstret på dag 2, men två av dem kom från källor med vikt 0,5: r05 (Facebook) och r19 (forum, promptinjektionen och det obekräftade konkursryktet). r19 räknades dessutom själv in i trenden, så ett rykte från ett forum höjde sin egen poäng till 99 och hamnade överst för Kalle. Det är samma felmönster som i det tidigare beslutet om trenden ("Observation"): en trend ska visa att flera trovärdiga källor skriver om entiteten, inte att någon kan skapa en med några inlägg.
+
+**Beslut:**
+- Bara artiklar från källor med vikt minst 1,0 (`MIN_TREND_SOURCE_WEIGHT` i `trend.service.ts`) räknas i trenden. Det gäller även artikeln som poängsätts: kommer den från en källa under 1,0 räknas den inte som en, och den kan inte heller få faktorn genom att andra artiklar redan finns. (Den kan däremot få faktorn om tre starka källor redan skrivit om entiteten. Det är avsiktligt: trenden finns, oberoende av vad just den här artikeln är.)
+- Vikterna kommer från `data/sources.json` (samma `SOURCE_WEIGHTS` som poängen). En källa som saknas där räknas inte.
+- Filtret ligger i `ArticleAccessService.countArticlesAboutEntity` (nytt argument `sourceIds`), så att arkitekturregeln om åtkomst till innehållstabellerna hålls.
+- Gränsen 1,0 är en gissning på samma sätt som övriga trösklar: den släpper in SMHI (1,0) och släpper ut Google-recensioner och Platsbanken (0,8), som inte heller bör skapa en trend. Bör avgöras med företaget.
+
+**Alternativ:** (a) Räkna alla, men vikta räkningen med källvikt (till exempel summan av vikterna ≥ 3). Mer nyanserat, men en handfull forumtrådar kan fortfarande nå gränsen, och förklaringen blir svårare. (b) Utesluta artiklar som flaggats för granskning. Löser r19 men inte r05, och förutsätter att flaggningen fungerar. (c) Lämna det och kräva verifiering först. Verifiering mot en andra källa är den riktiga lösningen men medvetet bortvald (se ÖVERLÄMNING.md), så trenden behöver ett eget skydd tills dess.
+
+**Känd risk som kvarstår:** Det här förhindrar att svaga källor *skapar* en trend, men inte att de hamnar högt. En artikel från en källa med låg vikt kan fortfarande få hög poäng, eftersom modellens påverkan, brådska och entitetsnivå väger tyngre än källvikten (20 %), och en trend som skapats av starka källor ger faktorn även till ett rykte som nämner samma entitet. r19 förblir därför högt rankad (79 på dag 1, se det verifierade värdet nedan). Den verkliga lösningen är verifiering mot en andra källa innan ett obekräftat akutlarm eller rykte får hög poäng eller skickas. Den ligger under "medvetet bortvalt" och ska stå som ett av nästa stegen i ÖVERLÄMNING.md.
+
+**Verifierat före och efter** (`npm run demo`, dag 1, med `git stash` på ändringarna mot senaste committen `7e78c59`):
+- Före (commit `7e78c59`): r19 **99** i både Mikaels och Kalles utskick, och r13 **75**. Trenden räknade 5 artiklar (r13, r05, r04, r19, d04).
+- Efter: r19 **79** och r13 **60**. Trenden räknar 3 artiklar (r13, r04, d04), och r05 och r19 räknas inte.
+- Rättelse av tidigare text: r13 ändras också, från 75 till 60, eftersom den (liksom r19) fick faktorn ×1,25 genom att Facebookinlägget r05 och r19 räknades in. r04 är oförändrad (75).
+- Poängen 99 kom alltså inte från att r19 räknades om på dag 2, utan från att dag 1-körningen redan såg r05 och r19 som en del av trenden.
+
+**Bevis:** `test/trend.spec.ts` skrevs först. Första körningen: 3 av 4 nya fall röda av rätt skäl (forum, Facebook och blogg räknades, poängen blev 99 i stället för 79), fallet med tre starka källor var redan grönt. Efter ändringen är alla 517 tester gröna. Ett äldre trendtest behövde `source_name` i sina testrader (de saknade källa). Demon visar nu att Rikstaks trend bygger på r13, r04 och d04, och att r05 och r19 inte räknas.
+
 ## AI-logg
 
 - **2026-10-09, AI hjälpte (`otherSources`-läckan):** AI:n läste utskicksmodulen och hittade att `otherSources` frågade `articles` direkt, förbi åtkomstmodulen. Namn och länkar till källor från artiklar utanför omfånget, flaggade för granskning och i nekade kategorier, kunde alltså nå fel mottagare. Arkitekturtestet missade det eftersom det bara söker efter `from articles`. AI:n skrev först tre röda tester och sedan `sourcesByCluster`, som delar omfångsregler med resten av åtkomstmodulen. Jag granskade lösningen och valde den framför att låta utskicket filtrera själv. Läckan hade inte upptäckts av de ärvda testerna.

@@ -31,7 +31,7 @@ describe('trend (fel 21 och 26): minst 3 unika artiklar om samma entitet de sena
 
   /** En tidigare sparad artikel om Rikstak: publicerad för `publicerad` dygn sedan, men sparad (created_at) i dag. */
   const tidigare = (rawId: string, publicerad: number, entityIds = [rikstakId]) => ({
-    raw_id: rawId, entity_ids: entityIds, published_at: dagar(publicerad), created_at: NU, spaces: ['takvard'], urgency: 'info', impact: 60, confidence: 0.9,
+    raw_id: rawId, source_name: 'di', entity_ids: entityIds, published_at: dagar(publicerad), created_at: NU, spaces: ['takvard'], urgency: 'info', impact: 60, confidence: 0.9,
   });
 
   const poäng = (isTrending: boolean, publishedAt = ny.published_at!) =>
@@ -51,6 +51,23 @@ describe('trend (fel 21 och 26): minst 3 unika artiklar om samma entitet de sena
     const row = await testKnex()('articles').where('raw_id', 'n1').first();
     expect(row.relevance).toBe(poäng(förväntad as boolean));
     expect(poäng(true)).toBeGreaterThan(poäng(false));
+  });
+
+  test.each([
+    ['två tidigare från forum/Facebook + den nya (di) = bara 1 som räknas', ['forum', 'facebook'], 'di', false],
+    ['en tidigare från blogg + en från di + den nya (di) = 2 som räknas', ['blogg', 'di'], 'di', false],
+    ['två tidigare från di/smhi (vikt minst 1,0) + den nya = 3', ['di', 'smhi'], 'di', true],
+    ['två tidigare från di + en ny från forum: den nya räknas inte själv', ['di', 'di'], 'forum', false],
+  ])('källor med vikt under 1,0 räknas inte in i trenden: %s', async (_namn, tidigareKällor, nyKälla, förväntad) => {
+    await seedArticles((tidigareKällor as string[]).map((s, i) => ({ ...tidigare(`t${i}`, 5 + i), source_name: s })));
+    await enrich.run([{ ...ny, source: nyKälla as string }], NU);
+    const row = await testKnex()('articles').where('raw_id', 'n1').first();
+    const vikt = nyKälla === 'di' ? 1.5 : 0.5;
+    const väntat = relevance(
+      { impact: 60, confidence: 0.9, urgency: 'info', sourceWeight: vikt, publishedAt: ny.published_at!, entities: [{ id: rikstakId, watchLevel: 'critical' }], isTrending: förväntad as boolean, isFollowUp: false },
+      NU,
+    );
+    expect(row.relevance).toBe(väntat);
   });
 
   it('räknar unika artiklar, inte rader: flera rader i entity_matches för samma artikel ger inte trend', async () => {

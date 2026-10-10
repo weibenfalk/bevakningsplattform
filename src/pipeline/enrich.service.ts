@@ -178,7 +178,7 @@ export class EnrichService {
     const entityMatches = parsed.success
       ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
       : [];
-    const isTrending = await this.trends.isTrending(entityMatches, item.published_at || null, now, articleId);
+    const isTrending = await this.trends.isTrending(entityMatches, item.published_at || null, now, item.source, articleId);
     const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems, isFollowUp, isTrending);
     return { data, entityMatches, score, reviewReason };
   }

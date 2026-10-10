@@ -165,7 +165,10 @@ async function main() {
     { impact: d04.impact, confidence: d04.confidence, urgency: d04.urgency, sourceWeight: pipelineWeights.get('di') ?? 0, publishedAt: d04.published_at.toISOString(), entities: [{ id: String(rikstak.id), watchLevel: 'critical' }], isTrending: false, isFollowUp: d04.is_followup },
     DAG2,
   );
-  console.log(`   Trend: Rikstak har ${rikstakArtiklar.length} unika artiklar (${rikstakArtiklar.map((a: { raw_id: string }) => a.raw_id).join(', ')}) de senaste 30 dygnen`);
+  const räknas = rikstakArtiklar.filter((a: { source_name: string }) => (pipelineWeights.get(a.source_name) ?? 0) >= 1.0);
+  const räknasEj = rikstakArtiklar.filter((a: { source_name: string }) => !räknas.includes(a));
+  console.log(`   Trend: Rikstak har ${räknas.length} unika artiklar från källor med vikt minst 1,0 (${räknas.map((a: { raw_id: string }) => a.raw_id).join(', ')}) de senaste 30 dygnen`);
+  console.log(`     Räknas inte (källvikt under 1,0): ${räknasEj.map((a: { raw_id: string }) => a.raw_id).join(', ') || 'inga'}`);
   if (d04) console.log(`     d04 ger trend: poäng ${utanTrend} utan faktorn -> ${d04.relevance} med ×1,25`);
   console.log(`   Profilmatchning: ${day2.matching.profilesRun} profiler kördes mot ${day2.enrich.stored.length} nya eller uppdaterade artiklar, ${day2.matching.rows} träffar sparade`);
   printRuns((await app.get(RunLogService).list()).slice(runsBefore));

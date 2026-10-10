@@ -211,14 +211,15 @@ export class ArticleAccessService {
   /**
    * Antal UNIKA artiklar som nämner en entitet och publicerades i fönstret (`since` till `until`), för trendberäkningen.
    * Räknar artiklar (en rad per artikel i `articles`), inte träffrader, och på publiceringstiden, inte på när raden
-   * sparades. Artikeln `excludeArticleId` räknas inte (en uppdatering ska inte räkna sig själv). Medvetet utan
+   * sparades. Bara artiklar från `sourceIds` räknas (trenden ska inte kunna skapas av källor med låg vikt). Artikeln `excludeArticleId` räknas inte (en uppdatering ska inte räkna sig själv). Medvetet utan
    * användaromfång: det är en siffra över hela systemet och ingen artikel lämnar modulen.
    */
-  async countArticlesAboutEntity(entityId: string, since: Date, until: Date, excludeArticleId?: number): Promise<number> {
+  async countArticlesAboutEntity(entityId: string, since: Date, until: Date, sourceIds: string[], excludeArticleId?: number): Promise<number> {
     const query = this.knex('articles')
       .whereRaw('entity_ids @> ARRAY[?]::text[]', [entityId])
       .andWhere('published_at', '>=', since)
-      .andWhere('published_at', '<=', until);
+      .andWhere('published_at', '<=', until)
+      .whereIn('source_name', sourceIds);
     if (excludeArticleId !== undefined) query.whereNot('id', excludeArticleId);
     const row = await query.count<{ count: string }>('* as count').first();
     return Number(row?.count ?? 0);
