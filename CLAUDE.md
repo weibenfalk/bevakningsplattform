@@ -25,7 +25,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 1. **Rätta med test först.** Skriv testet i den vanliga sviten (`test/`), kör det och se att det är rött av rätt skäl,
    rätta, och se det bli grönt. Visa båda körningarna.
 2. **Uppdatera `docs/beslutslogg.md`** vid varje viktigt beslut: datum, alternativ och varför.
-3. **AI-logg** (sist i beslutsloggen): notera när AI:n hjälpte och när den hade fel. Uppgiften kräver 3–5 exempel, varav minst ett fel.
+3. **AI-logg** (sist i beslutsloggen): notera när AI:n hjälpte och när den hade fel. Uppgiften kräver 3–5 exempel, varav minst ett fel. Loggen hålls till högst 6 punkter (de starkaste); besluten ligger kvar i loggen.
 4. **Kontrollera paketversioner** med `npm view <paket> version` innan du lägger till ett beroende. Gissa aldrig ur minnet
    (det har redan gått fel en gång).
 5. **Inga personuppgifter** i dokumentation, kod eller commits (gäller även git-författaren). Inga hemligheter i repot.
@@ -43,7 +43,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
    40 tester inklusive syntaxfel (se `data/profiles.json`: `pf-tak-pris` har en oparad parentes och `pf-puts` en
    inledande `*`). Kopplas sedan till `profile_matches` (tabellen finns redan).
 4. **Dokumentation**: `ÖVERLÄMNING.md` (vad fungerar, vad fungerar inte, risker och nästa steg i ordning), `TIDSLOGG.md`
-   och färdig beslutslogg med AI-logg (AI-loggen har åtta punkter, varav fem där AI:n hade fel eller avvisades).
+   och färdig beslutslogg med AI-logg (AI-loggen har högst sex punkter: tre där AI:n hjälpte och tre där den hade fel eller styrdes om).
 
 **Medvetet bortvalt** (dokumenteras som nästa steg i ÖVERLÄMNING.md): AI-router med budgettak, hallucinationsskydd,
 verifiering av akutlarm mot en andra källa, riktiga insamlare och robots.txt, embeddings, sök, redaktörsgränssnitt,
