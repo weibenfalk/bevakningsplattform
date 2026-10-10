@@ -4,6 +4,8 @@ export interface DigestArticle {
   summary: string | null;
   urgency: string;
   otherSources: { url: string; source_name: string }[];
+  /** Vilka av mottagarens egna profiler som träffade artikeln, och med vilka termer. */
+  why?: { profile: string; terms: string[] }[];
 }
 
 const escapeHtml = (s: string) =>
@@ -31,6 +33,8 @@ function renderItem(a: DigestArticle): string {
     })
     .join(' · ');
 
+  const why = (a.why ?? []).map((w) => `${escapeHtml(w.profile)} (${w.terms.map(escapeHtml).join(', ')})`).join(' · ');
+
   const href = safeHref(a.url);
   const title = href
     ? `<a href="${escapeHtml(href)}" style="${LINK}">${escapeHtml(a.title)}</a>`
@@ -40,6 +44,7 @@ function renderItem(a: DigestArticle): string {
     ${title}
     ${a.summary ? `<p style="${TEXT}">${escapeHtml(a.summary)}</p>` : ''}
     ${sources ? `<p style="${TEXT}">Även: ${sources}</p>` : ''}
+    ${why ? `<p style="${TEXT}">Varför: ${why}</p>` : ''}
   </td></tr>`;
 }
 

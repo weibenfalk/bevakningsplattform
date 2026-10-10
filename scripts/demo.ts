@@ -17,6 +17,7 @@ import { DigestService } from '../src/digest/digest.service';
 import { EntityImportService } from '../src/import/entity-import.service';
 import { LLM, LlmProvider } from '../src/llm/llm.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
+import { PipelineService } from '../src/pipeline/pipeline.service';
 import { RawItem } from '../src/types';
 
 const brokenAi = process.argv.includes('--trasig-ai');
@@ -44,7 +45,7 @@ const readJson = <T>(file: string): T => JSON.parse(readFileSync(`data/${file}`,
 async function main() {
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
-  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes RESTART IDENTITY CASCADE');
+  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes, profile_matches, profile_versions, profiles, users RESTART IDENTITY CASCADE');
 
   const users = readJson<{ id: string; name: string; role: string; scopes: string[] }[]>('users.json');
   await knex('content_scopes').insert(users.map((u) => ({ user_id: u.id, spaces: u.scopes })));
@@ -67,12 +68,17 @@ async function main() {
 
   console.log(`\n== 2. Kör pipelinen för dag 1 (${brokenAi ? 'TRASIG AI' : 'AI-stubben'})`);
   const items = [...readJson<RawItem[]>('raw_items.json'), ...readJson<RawItem[]>('raw_items_extra.json')];
-  const enrichReport = await app.get(EnrichService).run(items);
+  const pipeline = await app.get(PipelineService).run(items);
+  const enrichReport = pipeline.enrich;
   const stored = await knex('articles').count<{ count: string }>('* as count').first();
   console.log(`   ${items.length} råposter in, ${stored?.count} artiklar sparade, ${enrichReport.skipped.length} överhoppade`);
   for (const s of enrichReport.skipped) {
     console.log(`   hoppade över ${s.rawId} (${s.reason})${s.existingRawId ? `, krockar med ${s.existingRawId}` : ''}`);
   }
+
+  console.log(`   Profiler (data/profiles.json): ${pipeline.profiles.loaded.length} giltiga, ${pipeline.profiles.skipped.length} hoppades över`);
+  for (const p of pipeline.profiles.skipped) console.log(`   hoppade över profilen ${p.id}: ${p.reason}`);
+  console.log(`   Profilmatchning: ${pipeline.matching.profilesRun} profiler kördes mot ${pipeline.enrich.stored.length} nya artiklar, ${pipeline.matching.rows} träffar sparade`);
 
   console.log('\n== 3. Vad varje användare får se (via ArticleAccessService, samma väg som mejl, sök och export)');
   mkdirSync('out', { recursive: true });
@@ -87,6 +93,17 @@ async function main() {
       const why = (EXPECTED[r.raw_id] ?? []).length ? `hör till ${EXPECTED[r.raw_id].join('+')}` : 'brus';
       console.log(`     ⚠ ${r.raw_id}  ${(r.title || '(ingen rubrik)').slice(0, 50).padEnd(50)} [${why}]`);
     }
+
+    // Profilträffar: bara användarens egna profiler. De filtrerar inte urvalet, utan förklarar det ("Varför:" i mejlet).
+    const why = await access.profileMatchesForUser(user.id, rows.map((r) => r.id));
+    const own = rows.filter((r) => why.has(r.id));
+    console.log(`   Profilträffar (${own.length} av ${rows.length} artiklar):`);
+    for (const r of own) {
+      const profiles = why.get(r.id)!.map((w) => `${w.profileId} [${w.terms.join(', ')}]`).join(' · ');
+      console.log(`     ${r.raw_id}  ${(r.title || '(ingen rubrik)').slice(0, 40).padEnd(40)} ${profiles}`);
+    }
+    const missed = rows.filter((r) => !why.has(r.id) && (r.relevance ?? 0) >= pipelineConfig.digest.threshold);
+    if (missed.length) console.log(`   Utan profilträff men ändå med i urvalet: ${missed.map((r) => r.raw_id).join(', ')}`);
 
     // Det riktiga utskicket: DigestService med tröskel, sortering på brådska och andra källor.
     const html = await app.get(DigestService).compose(user.id);

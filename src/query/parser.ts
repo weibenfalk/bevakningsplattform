@@ -52,10 +52,21 @@ function describe(token: Token): string {
   }
 }
 
+export interface ParseOptions {
+  /**
+   * Fält som får användas. Ett annat fält ger ett syntaxfel i stället för att tyst matcha ingenting.
+   * Utan begränsning är alla tio fält tillåtna.
+   */
+  fields?: readonly Field[];
+}
+
 class Parser {
   private index = 0;
 
-  constructor(private readonly tokens: Token[]) {}
+  constructor(
+    private readonly tokens: Token[],
+    private readonly allowedFields: readonly Field[] = FIELDS,
+  ) {}
 
   // ---- Hjälpmetoder ----
 
@@ -150,6 +161,9 @@ class Parser {
       if (first.prefix || !known) {
         throw new QuerySyntaxError(`Okänt fält '${first.text}'. Tillåtna fält: ${FIELDS.join(', ')}`, first.pos);
       }
+      if (!this.allowedFields.includes(known)) {
+        throw new QuerySyntaxError(`Fältet ${known} stöds inte än. Stödda fält: ${this.allowedFields.join(', ')}`, first.pos);
+      }
       field = known;
       this.next(); // fältnamnet
       this.next(); // kolonet
@@ -180,6 +194,6 @@ class Parser {
 }
 
 /** Tolkar en fråga till ett träd. Kastar `QuerySyntaxError` med position om frågan är felaktig. */
-export function parse(query: string): Node {
-  return new Parser(tokenize(query)).parseQuery();
+export function parse(query: string, options: ParseOptions = {}): Node {
+  return new Parser(tokenize(query), options.fields).parseQuery();
 }

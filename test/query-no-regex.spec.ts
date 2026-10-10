@@ -30,8 +30,8 @@ function regexAnvandning(fil: string): string[] {
 describe('frågespråket använder inga reguljära uttryck (krav 4)', () => {
   const filer = globSync('src/query/**/*.ts');
 
-  it('det finns kod att granska: tokenizer, parser och utvärdering', () => {
-    expect(filer.map((f) => f.split('/').pop()).sort()).toEqual(['evaluator.ts', 'parser.ts', 'tokenizer.ts']);
+  it('det finns kod att granska: tokenizer, parser, utvärdering och utskrift', () => {
+    expect(filer.map((f) => f.split('/').pop()).sort()).toEqual(['describe.ts', 'evaluator.ts', 'parser.ts', 'tokenizer.ts']);
   });
 
   it('ingen fil i src/query använder regex', () => {

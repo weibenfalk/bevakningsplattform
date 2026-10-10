@@ -91,6 +91,48 @@ export class ArticleAccessService {
   }
 
   /**
+   * Av de angivna artiklarna, de som användaren får se. Används av profilmatchningen, så att en profil
+   * bara matchar inom ägarens omfång. Ingen fulltext.
+   */
+  async visibleAmong(userId: string, articleIds: number[]): Promise<ArticleRow[]> {
+    if (!articleIds.length) return [];
+    const scope = await this.scopes.get(userId);
+    return this.scoped(scope)
+      .whereIn('id', articleIds)
+      .select(PUBLIC_COLUMNS as unknown as string[])
+      .orderBy('id') as unknown as Promise<ArticleRow[]>;
+  }
+
+  /**
+   * Vilka av användarens EGNA profiler som träffade artiklarna, och med vilka termer. Bara träffar av profilens
+   * senaste version, och bara artiklar inom användarens omfång. Andras profiler lämnas aldrig ut.
+   */
+  async profileMatchesForUser(
+    userId: string,
+    articleIds: number[],
+  ): Promise<Map<number, { profileId: string; terms: string[] }[]>> {
+    const result = new Map<number, { profileId: string; terms: string[] }[]>();
+    if (!articleIds.length) return result;
+    const scope = await this.scopes.get(userId);
+    const rows: { article_id: number; profile_id: string; term: string }[] = await this.knex('profile_matches as m')
+      .join('profiles as p', 'p.id', 'm.profile_id')
+      .where('p.owner_id', userId)
+      .whereIn('m.article_id', articleIds)
+      .whereIn('m.article_id', this.scoped(scope).select('id'))
+      .whereRaw('m.profile_version = (select max(version) from profile_versions where profile_id = m.profile_id)')
+      .select('m.article_id', 'm.profile_id', 'm.term')
+      .orderBy(['m.article_id', 'm.profile_id', 'm.term']);
+    for (const r of rows) {
+      const list = result.get(r.article_id) ?? [];
+      const last = list[list.length - 1];
+      if (last?.profileId === r.profile_id) last.terms.push(r.term);
+      else list.push({ profileId: r.profile_id, terms: [r.term] });
+      result.set(r.article_id, list);
+    }
+    return result;
+  }
+
+  /**
    * Andra källor som rapporterat samma story, per kluster. Går genom samma omfång som övrig läsning,
    * så att man aldrig ser en källa från en artikel man inte får se. En fråga för alla kluster (inte en per artikel).
    */

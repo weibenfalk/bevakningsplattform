@@ -115,3 +115,31 @@ export function matches(node: Node, article: Article): boolean {
       });
   }
 }
+
+/** En term som text, så som den kan läsas i frågan: `title:"Rena Fönster"`, `pumpa*` eller `a NEAR/3 b`. */
+export function termText(node: Extract<Node, { type: 'term' | 'near' }>): string {
+  const words = (list: Word[]) => {
+    const text = list.map((w) => w.text + (w.prefix ? '*' : '')).join(' ');
+    return list.length > 1 ? `"${text}"` : text;
+  };
+  const field = node.field ? `${node.field}:` : '';
+  if (node.type === 'term') return field + words(node.words);
+  return `${field}${words(node.left)} NEAR/${node.distance} ${words(node.right)}`;
+}
+
+/**
+ * Vilka termer i frågan som gav träffen. Tom lista om artikeln inte träffar. Termer under NOT räknas inte,
+ * eftersom de är villkor som ska saknas.
+ */
+export function explain(node: Node, article: Article): string[] {
+  if (!matches(node, article)) return [];
+  switch (node.type) {
+    case 'and':
+    case 'or':
+      return node.children.flatMap((child) => explain(child, article));
+    case 'not':
+      return [];
+    default:
+      return [termText(node)];
+  }
+}

@@ -14,6 +14,7 @@ npm run db:up          # startar PostgreSQL i Docker (port 5433)
 npm run migrate        # skapar tabellerna
 npm run demo           # kör pipelinen på testdatan och fyller databasen `bevakning`
 npm start              # startar servern på http://127.0.0.1:3000
+npm run query -- "Rikstak AND NOT pumpa*"   # prövar en fråga mot testdatan, utan databas
 ```
 
 Stoppa och töm databasen med `npm run db:down`.
@@ -79,6 +80,40 @@ för modellen och sätter arbetsyta och påverkan efter nyckelord, så poängen 
 `npm run demo -- --trasig-ai` gör samma sak men med en AI som svarar ogiltigt, som en riktig modell ibland gör.
 Artiklarna flaggas då för granskning och publiceras inte, och originaltexten används aldrig som sammanfattning.
 
+Demon läser också in `data/profiles.json`. De två trasiga profilerna (`pf-tak-pris`, `pf-puts`) loggas med felmeddelande och
+hoppas över. De övriga körs mot de nya artiklarna efter berikningen, och träffarna sparas i `profile_matches`. Demon visar
+per användare vilka av hens egna profiler som träffade vilka artiklar och med vilken term, och mejlet i `out/` har
+"Varför: profil (term)" under artikeln. Profilerna styr inte urvalet: Kalle får r06 (rotavdraget) även om ingen av hans profiler träffar den.
+
+## Frågespråket (`npm run query`)
+
+`npm run query -- "<fråga>"` visar vad frågespråket (`src/query/`) gör med en fråga. Ingen databas behövs, datan
+läses direkt från `data/`. Dag 1 är `raw_items.json` och `raw_items_extra.json`, alltså samma som demon läser (med r19–r22). Dag 2 är `raw_items_dag2.json`. Felkodad text repareras som i pipelinen. r09 förekommer två gånger i dag 1 och visas därför två gånger. Skriptet skriver ut tre saker:
+
+1. **Tokens**, en per rad med position.
+2. **Trädet**, indenterat.
+3. **Träffar**: vilka artiklar i dag 1 och dag 2 som matchar, och vilken term som gav träffen (termer under `NOT` räknas inte).
+
+```bash
+npm run query -- '(Rikstak OR Takvårdarna) AND NOT pumpa*'
+npm run query -- '"Rena Fönster" OR fönsterput*'
+npm run query -- 'Rikstak NEAR/3 takmålning'
+```
+
+Vid syntaxfel visas frågan med en `^` under positionen, och skriptet avslutas med kod 1. De två trasiga profilerna
+i `data/profiles.json` ger till exempel:
+
+```text
+$ npm run query -- '*putsning OR fallskydd'
+Syntaxfel:
+  *putsning OR fallskydd
+  ^
+  Wildcard (*) får bara stå sist i ett ord, till exempel pumpa*, inte först eller mitt i (position 1)
+```
+
+Kom ihåg att citera frågan i skalet (enkla citattecken), annars tolkar skalet parenteser, `*` och `"`.
+Samma frågespråk används av pipelinen (profilmatchning efter berikningen). Regler och val står i `docs/beslutslogg.md`.
+
 ## Tester
 
 ```bash
@@ -89,7 +124,7 @@ npm run typecheck
 
 ### Testfiler
 
-184 tester i 19 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+364 tester i 29 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -113,6 +148,15 @@ testdatabasen.
 | `architecture.spec.ts` | Arkitekturregel: bara `src/access` läser innehållstabellerna (en textsökning, se fel 23) | 1 | nej |
 | `database-config.spec.ts` | `resolveDatabaseUrl` och att `knexProvider` använder den | 4 | nej |
 | `pipeline-config.spec.ts` | Tröskeln för triage ur miljön (tom eller ogiltig ger standardvärdet, inte 0) | 2 | nej |
+| `query-tokenizer.spec.ts` | Frågespråkets tokenizer: ord, fraser, NEAR, å/ä/ö, wildcard och syntaxfel med position | 30 | nej |
+| `query-parser.spec.ts` | Frågespråkets parser: träd, prioritet, implicit AND, fält, NEAR och syntaxfel (oparad parentes m.fl.) och fält som inte stöds | 44 | nej |
+| `query-evaluator.spec.ts` | Frågespråkets utvärdering: ord, fraser, prefix, fält, NEAR, svenska regler | 31 | nej |
+| `query-profiles.spec.ts` | Profilerna i `data/profiles.json`: de två trasiga ger fel, de giltiga träffar rätt artiklar | 11 | nej |
+| `profile-matching.spec.ts` | Profiler in (versioner, trasiga hoppas över), matchning i pipelinen, idempotens, ägarens omfång, fält som saknar data (fail closed) | 22 | ja |
+| `profile-digest.spec.ts` | "Varför: …" i mejlet: bara egna profiler och senaste version, urvalet oförändrat | 10 | delvis |
+| `query-data.spec.ts` | Datan i `npm run query`: samma filer som demon (inkl. r19–r22) och reparerad teckenkodning | 3 | nej |
+| `query-describe.spec.ts` | Utskriften i `npm run query`: tokens, träd, träffande termer och felmarkering | 11 | nej |
+| `query-no-regex.spec.ts` | Krav 4: ingen regex i `src/query` (kontrolleras med TypeScript-kompilatorn) | 3 | nej |
 | `test-database.spec.ts` | Testdatabasen: `_test`-skyddet och att testerna körs mot `bevakning_test` | 6 | delvis |
 
 Hjälpfiler (inga tester): `helpers.ts` (testapp, `seedArticles`, `scriptedLlm`), `test-database.ts`, `jest.env.ts` och
@@ -139,9 +183,13 @@ inte köra `npm run migrate` för testerna.
 | `src/access/` | Den enda vägen in till artiklar: omfång, nekade entiteter och kategorier, kolumnlista |
 | `src/pipeline/` | Förberedelse, dubblettkontroll, triage, berikning, poäng, entitetsmatchning |
 | `src/llm/` | `LlmProvider`-gränssnittet och stubben |
+| `src/query/` | Frågespråket: tokenizer, parser, utvärdering |
+| `src/profiles/` | Läser in profiler ur `data/profiles.json`, versionerade |
+| `src/pipeline/pipeline.service.ts`, `profile-match.service.ts` | Hela körningen (profiler, berikning, profilmatchning) och matchningen i batch |
 | `src/digest/`, `src/admin/` | Utskick och export |
 | `migrations/` | Schemat. Den första migrationen är hela datamodellen (krav 2). Tabellerna för behörighet, profiler och utskick används inte av koden än |
 | `scripts/demo.ts` | Demon (databasen `bevakning`) |
+| `scripts/query.ts` | `npm run query`: prövar en fråga mot testdatan |
 | `test/` | Tester (databasen `bevakning_test`) |
 | `data/` | Testdata: källor, användare, entiteter och råposter |
 

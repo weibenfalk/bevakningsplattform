@@ -10,6 +10,9 @@ import { EntityImportService } from './import/entity-import.service';
 import { LLM } from './llm/llm.provider';
 import { StubProvider } from './llm/stub.provider';
 import { EnrichService } from './pipeline/enrich.service';
+import { PipelineService } from './pipeline/pipeline.service';
+import { ProfileMatchService } from './pipeline/profile-match.service';
+import { ProfileService } from './profiles/profile.service';
 import { TrendService } from './pipeline/trend.service';
 import { TriageService } from './pipeline/triage.service';
 
@@ -25,6 +28,9 @@ import { TriageService } from './pipeline/triage.service';
     ArticleAccessService,
     DigestService,
     EnrichService,
+    ProfileService,
+    ProfileMatchService,
+    PipelineService,
     TriageService,
     TrendService,
     EntityImportService,

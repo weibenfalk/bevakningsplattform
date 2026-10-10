@@ -26,6 +26,14 @@ export interface EnrichReport {
   skipped: SkippedItem[];
   /** Poster som redan var sparade och kördes om utan ändring. */
   alreadyStored: number;
+  /** Artiklarna som sparades i den här körningen, med texten de berikades med. Profilmatchningen körs mot dem. */
+  stored: StoredArticle[];
+}
+
+export interface StoredArticle {
+  id: number;
+  title: string;
+  body: string;
 }
 
 @Injectable()
@@ -59,6 +67,7 @@ export class EnrichService {
     const candidates = triaged.kept;
     this.log.log(`${candidates.length} av ${items.length} gick vidare till berikning (${triaged.dropped.length} sållades bort, ${triaged.unscored.length} utan giltig poäng)`);
 
+    const stored: StoredArticle[] = [];
     for (const item of candidates) {
       const raw = await this.llm.complete({
         task: 'enrich',
@@ -79,9 +88,11 @@ export class EnrichService {
         : [];
       const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems.get(item) ?? []);
 
-      await this.knex('articles')
+      const inserted: { id: number }[] = await this.knex('articles')
         .insert({
           raw_id: item.id,
+          // Källans id (till exempel "di"), så att frågor som source:di kan träffa.
+          source_name: item.source,
           url: normalizeUrl(item.url),
           title: item.title,
           full_text: item.text,
@@ -102,9 +113,12 @@ export class EnrichService {
         })
         // Sista skyddet: databasen har unika url och raw_id. Dubbletter har redan sållats bort ovan.
         .onConflict()
-        .ignore();
+        .ignore()
+        .returning('id');
+      // Tomt svar betyder att databasen avvisade raden som dubblett. Då är artikeln inte ny.
+      if (inserted.length) stored.push({ id: inserted[0].id, title: item.title, body: item.text });
     }
-    return { skipped: skipped.map(({ raw: _raw, ...rest }) => rest), alreadyStored };
+    return { skipped: skipped.map(({ raw: _raw, ...rest }) => rest), alreadyStored, stored };
   }
 
   /** Sparar överhoppade poster med hela råposten, så att inget försvinner tyst. Unik per post, så en omkörning inte dubblerar loggen. */

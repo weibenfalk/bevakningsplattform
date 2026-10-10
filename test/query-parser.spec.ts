@@ -216,3 +216,37 @@ describe('parse: felaktig syntax', () => {
     expect(fel('*putsning OR fallskydd').position).toBe(1);
   });
 });
+
+describe('parse: begränsa vilka fält som får användas', () => {
+  const stod = ['title', 'body'] as const;
+  const felMed = (query: string): QuerySyntaxError => {
+    try {
+      parse(query, { fields: stod });
+    } catch (e) {
+      expect(e).toBeInstanceOf(QuerySyntaxError);
+      return e as QuerySyntaxError;
+    }
+    throw new Error(`"${query}" gav inget syntaxfel`);
+  };
+
+  it('ett fält som inte stöds ger ett tydligt fel med fältets position', () => {
+    const e = felMed('a AND NOT lang:en');
+    expect(e.position).toBe(11);
+    expect(e.message).toContain('Fältet lang stöds inte än');
+    expect(e.message).toContain('Stödda fält: title, body');
+  });
+
+  it('felet gäller också inom parenteser och NEAR', () => {
+    expect(felMed('(a OR author:Berg)').position).toBe(7);
+    expect(felMed('region:Kalmar NEAR/2 tak').message).toContain('Fältet region stöds inte än');
+  });
+
+  it('fält som stöds går igenom, och utan begränsning går alla fält igenom', () => {
+    expect(() => parse('title:a AND body:b', { fields: stod })).not.toThrow();
+    expect(() => parse('lang:en')).not.toThrow();
+  });
+
+  it('ett okänt fält ger fortfarande felet om okänt fält, inte om stöd', () => {
+    expect(felMed('titel:a').message).toContain('Okänt fält');
+  });
+});

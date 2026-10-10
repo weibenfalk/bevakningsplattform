@@ -25,11 +25,15 @@ export class DigestService {
     const clusterIds = [...new Set(selected.flatMap((a) => (a.cluster_id ? [a.cluster_id] : [])))];
     const sources = await this.access.sourcesByCluster(userId, clusterIds);
 
+    // Profilerna förklarar bara varför en artikel kom med. De styr inte urvalet (se beslutsloggen).
+    const why = await this.access.profileMatchesForUser(userId, selected.map((a) => a.id));
+
     const items: DigestArticle[] = selected.map((a) => ({
       title: a.title,
       url: a.url,
       summary: a.summary,
       urgency: a.urgency,
+      why: (why.get(a.id) ?? []).map((w) => ({ profile: w.profileId, terms: w.terms })),
       otherSources: ((a.cluster_id ? sources.get(a.cluster_id) : undefined) ?? []).filter((s) => s.id !== a.id),
     }));
     return renderDigest(items);
