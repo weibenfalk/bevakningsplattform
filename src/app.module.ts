@@ -21,7 +21,7 @@ import { RunLogService } from './pipeline/run-log.service';
 import { TrendService } from './pipeline/trend.service';
 import { TriageService } from './pipeline/triage.service';
 
-/** Platshållare: moduluppsättningen saknades i startkoden. */
+/** Hela applikationen i en modul. Att dela upp den per område står som kodskuld i ÖVERLÄMNING.md. */
 @Module({
   controllers: [ExportController, AdminController],
   providers: [

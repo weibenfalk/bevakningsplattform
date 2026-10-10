@@ -1,5 +1,5 @@
 import { ArticleAccessService } from '../src/access/article-access.service';
-import { INestApplicationContext } from '@nestjs/common';
+import { BadRequestException, INestApplicationContext } from '@nestjs/common';
 import { closeTestingApp, createTestingApp, seedArticles, testKnex } from './helpers';
 
 describe('ArticleAccessService', () => {
@@ -55,6 +55,13 @@ describe('ArticleAccessService: omfånget är en hård gräns', () => {
     await expect(access.forUser('u-anna', { sort: 'relevance; drop table articles' })).rejects.toThrow();
     const rows = await access.forUser('u-anna', { sort: 'relevance asc' });
     expect(rows.map((r) => r.raw_id)).toEqual(['a', 'b']);
+  });
+
+  it('sort som inte är text (?sort=a&sort=b ger en lista) är ett 400-fel och inte ett TypeError', async () => {
+    const access = app.get(ArticleAccessService);
+    for (const sort of [['relevance', 'id'], { column: 'id' }, 5]) {
+      await expect(access.forUser('u-anna', { sort: sort as never })).rejects.toThrow(BadRequestException);
+    }
   });
 
   it('sorterar fallande på relevans som standard', async () => {

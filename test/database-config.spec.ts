@@ -1,5 +1,6 @@
 import { LOCAL_DATABASE_URL, resolveDatabaseUrl } from '../src/config/database';
 import { knexProvider } from '../src/db/knex.provider';
+import { assertDemoDatabase } from '../scripts/db';
 
 describe('resolveDatabaseUrl', () => {
   it('använder DATABASE_URL när den är satt', () => {
@@ -34,5 +35,24 @@ describe('knexProvider', () => {
     } finally {
       process.env.DATABASE_URL = old;
     }
+  });
+});
+
+describe('assertDemoDatabase: demon tömmer tabellerna och körs bara mot den lokala demodatabasen', () => {
+  it.each([
+    [{ DATABASE_URL: 'postgres://u:p@localhost:5433/bevakning' }],
+    [{ DATABASE_URL: 'postgres://u:p@localhost:5433/bevakning', NODE_ENV: 'development' }],
+  ])('godkänner %j', (env) => {
+    expect(() => assertDemoDatabase(env)).not.toThrow();
+  });
+
+  it.each([
+    ['en annan databas', { DATABASE_URL: 'postgres://u:p@db.example:5432/bevakning_prod' }],
+    ['produktion', { DATABASE_URL: 'postgres://u:p@localhost:5433/bevakning', NODE_ENV: 'production' }],
+    ['en testdatabas (den hör till testerna)', { DATABASE_URL: 'postgres://u:p@localhost:5433/bevakning_test' }],
+    ['en URL som inte går att tolka', { DATABASE_URL: 'inte en url' }],
+    ['ingen URL alls', {}],
+  ])('vägrar %s', (_namn, env) => {
+    expect(() => assertDemoDatabase(env)).toThrow(/demon/i);
   });
 });

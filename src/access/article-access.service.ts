@@ -69,7 +69,9 @@ const PUBLIC_COLUMNS = [
 /** Kolumner som sorteringen får använda. Värdet från anroparen når aldrig SQL som text. */
 const SORTABLE_COLUMNS: ReadonlySet<string> = new Set(['relevance', 'published_at', 'impact', 'raw_id', 'id']);
 
-function parseSort(sort: string | undefined): { column: string; order: 'asc' | 'desc' } {
+function parseSort(sort: unknown): { column: string; order: 'asc' | 'desc' } {
+  // `?sort=a&sort=b` ger en lista i Express. Allt som inte är text är ett felaktigt anrop (400), inte ett TypeError (500).
+  if (sort !== undefined && typeof sort !== 'string') throw new BadRequestException('sort måste vara en text');
   if (sort === undefined || sort.trim() === '') return { column: 'relevance', order: 'desc' };
   const [column, direction, ...rest] = sort.trim().split(/\s+/);
   const order = (direction ?? 'asc').toLowerCase();

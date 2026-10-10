@@ -2,6 +2,7 @@ import { INestApplicationContext } from '@nestjs/common';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ContentScopeService } from '../src/access/content-scope.service';
 import { EntityImportService } from '../src/import/entity-import.service';
 import { PipelineService } from '../src/pipeline/pipeline.service';
 import { ProfileMatchService } from '../src/pipeline/profile-match.service';
@@ -79,6 +80,14 @@ describe('ProfileService: profilerna läses in', () => {
     expect(report.loaded).toEqual([]);
     expect(report.skipped.map((s) => s.id)).toEqual(['p1', 'p2']);
     expect(report.skipped[0].reason).toMatch(/okänd användare|omfång/i);
+  });
+
+  it('ett fel som inte är "okänd användare" (till exempel databasen) döljs inte som en överhoppad profil', async () => {
+    jest.spyOn(app.get(ContentScopeService), 'get').mockRejectedValueOnce(new Error('connection refused'));
+    await expect(
+      app.get(ProfileService).loadFromFile(profilfil([{ id: 'p1', user: 'u-kalle', query: 'Rikstak' }])),
+    ).rejects.toThrow('connection refused');
+    expect(await testKnex()('profiles').pluck('id')).toEqual([]);
   });
 
   it('en profil som blir trasig behåller sin senaste giltiga version och rapporteras', async () => {

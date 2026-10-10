@@ -69,7 +69,7 @@ Allt med status "rättat" i statustabellen. I korthet:
 | Obekräftade källor kan hamna högt | Ryktet r19 (“Rikstak i konkurs?!”) från ett forum får 79 poäng och kommer med i utskicket för takvård. Svaga källor (vikt under 1,0) kan inte längre skapa en trend, vilket sänkte r19 från 99. Men ett rykte kan fortfarande passera tröskeln. Gränsen 1,0 är inte kalibrerad. Den riktiga lösningen är verifiering mot en andra källa. | Fel 4b och 49 |
 | **AI:n kan välja fel men giltig arbetsyta** | Valideringen stoppar ogiltiga svar, inte felaktiga. En modell som luras av injektionstext kan skicka en nyhet till fel arbetsyta. | Fel 4b |
 | **Klustring saknas** | Samma story från flera källor (r01/r02, r16/r17) skickas som separata nyheter. Tröskeln för samma story är inte kalibrerad, och märkt data saknas. | Fel 29, 30 |
-| **`ArticleAccessService` har blivit stor** | Cirka 300 rader: artiklar, utskicksloggen, trendräkning och profilträffar. Fungerar och är testad, men är svår att överblicka. | `src/access/` |
+| **`ArticleAccessService` har blivit stor** | Cirka 420 rader: artikelläsning, arkivmatchning, identiteter för dubblettkontrollen, utskicksloggen, trendräkning och profilträffar. Fungerar och är testad, men är svår att överblicka. | `src/access/` |
 | **Profiler matchas bara mot nya artiklar** | Frågetestaren (admin) provar en fråga mot hela arkivet med samma text som pipelinen (originaltexten, inne i åtkomstmodulen) och visar per träff om vald användare skulle se artikeln och varför inte. I en riktig version ska en redaktör bara se träffar inom sin egen behörighet (`matchWholeArchive` har inget användaromfång och får bara anropas efter en adminkontroll), men artiklar äldre än 90 dagar har rensad text och provas bara på rubrik och sammanfattning. En ny profil matchas inte mot gamla artiklar i `profile_matches`. Prestandakravet (under 2 sekunder mot 30 dagar) är inte mätt: upp till 5000 artiklar med text läses in och utvärderas i minnet. `matchWholeArchive` är det enda undantaget från att originaltexten aldrig läses ut ur åtkomstmodulen, och det bevakas av `test/raw-text.spec.ts`. | Beslutsloggen |
 | **Delar av datamodellen används inte** | `memberships`, `visibility_exceptions`, `sections` och `subscriptions` finns men används inte. Omfånget styrs av `content_scopes`, profilerna läses in från `data/profiles.json` vid varje körning och synligheten per profil tillämpas inte. En förvald publikation används. | Datamodellen |
 | **Inga riktiga mejl** | Utskicket sparas och renderas till `out/`, men skickas inte. Plaintextversion, dark mode och avregistreringslänk saknas. | `src/digest/` |
@@ -82,6 +82,21 @@ Riktig inloggning (till exempel företagets SSO) och rollerna från datamodellen
 tjänster inom `src/access/` (artiklar, utskick, statistik), med samma arkitekturtest. Bygg klustring när märkt data
 finns att kalibrera mot.
 *Varför först:* ett system som kan läcka data eller skickar samma story tre gånger blir inte bättre av fler funktioner.
+Kodskuld från granskningen (ingen läcka, men det som gör koden svårare att ändra):
+- Dela `AppModule` per område (databas, referensdata, åtkomst, AI, pipeline, profiler, utskick, admin, auth). Filläsningen vid import flyttas till `useFactory`.
+- Stäng databaspoolen i en `OnApplicationShutdown` och slå på `enableShutdownHooks()` (i dag har demon, `purge` och testerna egna `destroy()`).
+- Validera gränserna med zod: `RawItem` vid inläsning (en trasig post ska bli `invalid_item`, inte stoppa steget), `sources.json`, `users.json`, `profiles.json`, och DTO med pipe på varje endpoint (`sort` är redan rättad).
+- Typa Knex (`knex<ArticleRow>` eller en `Tables`-deklaration) och ta bort de sju `as unknown as` i åtkomstmodulen.
+- `DigestService.send` ska använda `CLOCK` (i dag `new Date()`), och bygget och loggningen ska vara atomiska.
+- Index i en ny migration: GIN på `search_vector`, `spaces`, `entity_ids`, `categories`, och B-träd på `published_at` och `relevance`. Släpp den oanvända tabellen `entity_matches`.
+- Dela `EnrichService`: en `toArticleRow` som insättning och uppdatering delar, och separata steg för inläsning och berikning (låt posterna bära sina `problems` i stället för en `Map` på objektidentitet).
+- Flytta `statusFor` och `excludedByNot` till en `ProfileAdminService`, och lägg `RunLogService.latest(step)` i stället för att läsa alla körningar.
+- Lägg `URGENCIES` (som `SPACES`) i `types.ts`, så att brådskans ordning och värden finns på ett ställe.
+- Importen av entiteter i en transaktion, en gemensam `dataDir()` i stället för sökvägar relativa till arbetskatalogen, och `StreamableFile` med `Content-Disposition` i exporten.
+- Vid riktig inloggning: global guard med `@Public()` och `@CurrentUser()` i stället för `@Req()`.
+- Testerna: byt ut `installLlm` (skriver över privata fält) mot `overrideProvider(LLM)`, gör `schema.spec.ts` oberoende av ordning och ta bort testet att `sent_articles` inte finns.
+- Utvärderaren delar upp texten en gång per artikel i stället för per term (hör ihop med prestandakravet som inte är mätt).
+- ESLint (`typescript-eslint`, `react-hooks`) och Prettier i båda paketen, och slå på `noUnusedLocals`, `noUncheckedIndexedAccess` och `noImplicitOverride`. Backend ligger på TypeScript 6, gränssnittet på 7 (förmodligen för `ts-jest`): skriv in skälet eller jämna ut.
 
 **2. Riktig AI och riktiga utskick.**
 En riktig leverantör bakom `LlmProvider`, via en router med modellval i konfiguration, reservmodell, omförsök och
@@ -91,6 +106,7 @@ två eller tre kandidater mot ett märkt testset (krav: data inom EU, bra svensk
 riktiga mejl via en mejltjänst, och publikationer och prenumerationer i bruk.
 *Varför före insamlingen:* det går att bygga och mäta med testdatan som finns. Insamlingen kräver mer arbete och juridiska
 överväganden.
+Kodskuld: berikningen går en post i taget och ett fel från leverantören (timeout, 429) stoppar hela steget. Fånga per post, logga som `ai_error` i `skipped_items`, begränsa parallellismen och räkna om i omgångar.
 
 **3. Riktig insamling.**
 En basklass för källor med robots.txt och högst en förfrågan per två sekunder per domän, och en adapter per källtyp
@@ -102,6 +118,12 @@ Schemaläggning av pipelinen och av rensningen. Adaptrarna behöver bara leverer
 Mät frågetestaren mot kravet (under 2 sekunder mot 30 dagar), redaktionell arbetsyta för att godkänna en utgåva,
 skrivande adminfunktioner (användare och behörighet, först efter riktig inloggning och med revisionslogg), arkiv och sök, larmmotor och feedback.
 *Varför sist:* verktygen bygger på att allt ovan fungerar.
+Kodskuld i gränssnittet:
+- Visa listan med `isPending` och `placeholderData` i stället för att dölja den vid varje bakgrundshämtning (fönsterfokus), och byt effekt-och-räknare i `QueryTester` mot lyft state.
+- Dela typerna med backend: en `src/admin/contract.ts` utan Nest-importer som gränssnittet läser med `import type`. Ge svaren från `/admin/users` och `/admin/view-as` namngivna typer.
+- Läs felmeddelandet ur svaret i `api.ts` (i dag visas bara `statusText`).
+- Tillgänglighet: `emerald-700` i stället för `emerald-600` (under 4,5:1 mot vitt), `role="status"` på laddytor, och ingen mjuk scroll vid `prefers-reduced-motion`.
+- Byt de handskrivna `ui/`-filerna mot genererade (`npx shadcn add button card`) när fler varianter behövs, och skriv komponenttester.
 
 Löpande: mät prestandakraven och målen i specen (inga missade regeländringar, under 20 procent falska träffar i
 konkurrentbevakningen, under 60 kronor per utskick). Det kräver märkt data, och det bör finnas tidigt.

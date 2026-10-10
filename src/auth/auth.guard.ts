@@ -6,7 +6,7 @@ export interface AuthedRequest extends Request {
 }
 
 /**
- * Platshållare: autentiseringen saknades i startkoden.
+ * Platshållare för riktig inloggning (se fel 18 i docs/kodgranskning.md).
  * Läser användar-id från headern x-user-id. Endast för lokal körning, inte riktig inloggning.
  */
 @Injectable()

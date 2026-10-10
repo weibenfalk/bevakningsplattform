@@ -9,7 +9,7 @@
 import 'reflect-metadata';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
-import { db } from './db';
+import { assertDemoDatabase, db } from './db';
 import { AppModule } from '../src/app.module';
 import { ArticleAccessService } from '../src/access/article-access.service';
 import { pipelineConfig } from '../src/config/pipeline.config';
@@ -63,6 +63,7 @@ function printRuns(runs: PipelineRun[]) {
 }
 
 async function main() {
+  assertDemoDatabase();
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
   await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes, profile_matches, profile_versions, profiles, users, pipeline_runs, editions, publications RESTART IDENTITY CASCADE');

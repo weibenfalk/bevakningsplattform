@@ -24,4 +24,17 @@ describe('normalizeUrl', () => {
   it('en url utan parametrar är oförändrad', () => {
     expect(normalizeUrl(base)).toBe(base);
   });
+
+  it.each(['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,<b>x</b>', 'ftp://example.se/fil', 'file:///etc/passwd'])(
+    'avvisar %s: bara http och https kan vara en artikels adress',
+    (url) => {
+      expect(() => normalizeUrl(url)).toThrow(/http/i);
+    },
+  );
+
+  it('samma adress med och utan spårningsparameter blir samma adress, även när övriga parametrar är kodade', () => {
+    const plain = `${base}?q=a%20b&sida=2`;
+    expect(normalizeUrl(`${plain}&utm_source=rss`)).toBe(normalizeUrl(plain));
+    expect(normalizeUrl(`${base}?utm_source=rss&q=a%20b&sida=2`)).toBe(normalizeUrl(plain));
+  });
 });

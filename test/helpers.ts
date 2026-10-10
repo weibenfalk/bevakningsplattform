@@ -11,7 +11,7 @@ import { EnrichService } from '../src/pipeline/enrich.service';
 import { assertTestDatabase } from './test-database';
 
 /**
- * Platshållare: testhjälparna saknades i startkoden.
+ * Testhjälparna: appen, databasen och en styrd AI-leverantör.
  * Testerna kör mot en egen databas (bevakning_test, se test-database.ts) och tömmer tabellerna först.
  */
 let app: INestApplicationContext | undefined;

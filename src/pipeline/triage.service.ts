@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { pipelineConfig } from '../config/pipeline.config';
 import { extractJson } from '../llm/extract-json';
 import { LLM, LlmProvider } from '../llm/llm.provider';
+import { neutralize } from '../llm/prompt';
 import { RawItem } from '../types';
 
 const SYSTEM_PROMPT = `Bedöm hur relevant varje text är för en koncern inom takvård och fönsterputs, 0-100.
@@ -20,9 +21,6 @@ export interface TriageResult {
 /** Poängen måste vara ett ändligt tal mellan 0 och 100. Allt annat är ogiltigt. */
 const validScore = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
-
-/** Artikeltexten får inte kunna stänga eller öppna avgränsningen. */
-const neutralize = (text: string) => text.replace(/<\/?artikel[^>]*>/gi, '');
 
 @Injectable()
 export class TriageService {

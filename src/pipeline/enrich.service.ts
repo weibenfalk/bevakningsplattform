@@ -7,6 +7,7 @@ import { KNEX } from '../db/knex.provider';
 import { CATEGORIES, EnrichmentSchema } from '../llm/enrichment.schema';
 import { extractJson } from '../llm/extract-json';
 import { LLM, LlmProvider } from '../llm/llm.provider';
+import { neutralize } from '../llm/prompt';
 import { Entity, RawItem, SPACES, WatchLevel } from '../types';
 import { matchEntities } from './entity-matcher';
 import { ScoreBreakdown, scoreBreakdown } from './score';
@@ -165,7 +166,7 @@ export class EnrichService {
     const raw = await this.llm.complete({
       task: 'enrich',
       system: SYSTEM_PROMPT,
-      prompt: `<artikel>\n${item.title}\n\n${item.text}\n</artikel>`,
+      prompt: `<artikel>\n${neutralize(item.title)}\n\n${neutralize(item.text)}\n</artikel>`,
     });
 
     const parsed = EnrichmentSchema.safeParse(extractJson(raw));

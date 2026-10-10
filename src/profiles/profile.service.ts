@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Knex } from 'knex';
 import { existsSync, readFileSync } from 'node:fs';
 import { ArticleAccessService } from '../access/article-access.service';
@@ -118,7 +118,9 @@ export class ProfileService {
       let spaces: string[];
       try {
         spaces = (await this.scopes.get(valid.user)).spaces;
-      } catch {
+      } catch (e) {
+        // Bara "användaren finns inte" hoppar profilen över. Ett databasfel ska stoppa körningen, inte se ut som en okänd ägare.
+        if (!(e instanceof NotFoundException)) throw e;
         skip(`Okänd användare ${valid.user} (inget innehållsomfång)`);
         continue;
       }

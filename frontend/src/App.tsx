@@ -63,7 +63,14 @@ export default function App() {
         <p className="text-sm text-muted-foreground">Läsbart adminverktyg. Visar vad användaren ser, och varför.</p>
       </header>
 
-      <Select value={userId} onValueChange={setUserId} disabled={!users.data}>
+      <Select
+        value={userId}
+        onValueChange={(id) => {
+          setUserId(id);
+          setTestRequest(undefined); // en fråga som provades för förra användaren ska inte köras om för den nya
+        }}
+        disabled={!users.data}
+      >
         <SelectTrigger aria-label="Välj användare">
           <SelectValue placeholder={users.isPending ? 'Laddar användare…' : 'Välj användare'} />
         </SelectTrigger>
@@ -77,7 +84,7 @@ export default function App() {
 
       {userId && <ProfilesSection userId={userId} onTest={(query) => setTestRequest((prev) => ({ query, n: (prev?.n ?? 0) + 1 }))} />}
 
-      <QueryTester userId={userId} userName={users.data?.find((u) => u.id === userId)?.name} request={testRequest} />
+      <QueryTester key={userId} userId={userId} userName={users.data?.find((u) => u.id === userId)?.name} request={testRequest} />
 
       {view.isFetching && <p className="text-sm text-muted-foreground">Laddar artiklar…</p>}
       {view.error && <ErrorBox error={view.error} />}

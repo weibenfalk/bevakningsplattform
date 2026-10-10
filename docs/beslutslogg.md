@@ -748,6 +748,57 @@ _(Metoden heter numera `matchWholeArchive`, se nästa post.)_
 
 **Bevis:** testerna skrevs först. Första körningen: 7 röda, varav `nodeText`, `notNodes` och `relaxNot` saknades, och profilsvaret hade inte de nya fälten. Två av mina antaganden i testerna var fel (`pf-koncern` har bara en träff, och det fanns ingen pumpartikel), vilket jag rättade i testerna och inte i koden. Efter ändringen är alla 591 tester gröna.
 
+## 2026-10-10: Webbadresser: bara http och https, och spårningsparametrar tas bort som text
+
+**Krav.** Kodgranskningen (H2 och M9b) visade två luckor i adressen som är artikelns identitet. `normalizeUrl` släppte igenom `javascript:` och `data:`, och adminvyn gjorde en `href` av vad som helst. Dessutom fick samma adress med och utan `utm_source` olika identitet när den hade andra kodade parametrar (`?q=a%20b` blev `?q=a+b` först när något togs bort).
+
+**Beslut:**
+- `normalizeUrl` kastar för allt utom http och https. Dubblettkontrollen fångar redan kastet och loggar posten som `invalid_url` med hela råposten, så ingen ny väg behövdes.
+- Adminvyns `ArticleTitle` gör bara en länk av en http(s)-adress (`frontend/src/lib/url.ts`), annars en vanlig text. Det är samma regel som mejlets `safeHref`, medvetet skriven en gång till eftersom gränssnittet är ett eget paket. Försvaret finns alltså på två ställen: vid inläsning och vid visning.
+- Frågesträngen filtreras som text, parameter för parameter, i stället för via `searchParams.delete`. Övriga parametrar behåller sin kodning och ordning.
+
+**Alternativ:** (a) Bara filtrera i gränssnittet. Då ligger en `javascript:`-adress kvar som identitet och i exporten. (b) Bara avvisa vid inläsning. Redan sparade adresser och framtida skrivvägar skulle ändå kunna nå en `href`. (c) Skriva om alla parametrar via `URLSearchParams` så att alla adresser får samma kodning. Ger en enhetligare identitet men ändrar varje lagrad adress, och `unique(url)` i databasen skulle kräva en datamigrering.
+
+**Känd begränsning:** `a%20b` och `a+b` är fortfarande två identiteter, liksom samma parametrar i olika ordning. Redan sparade adresser rensas inte (demodatan har inga). Gränssnittet har inget testverktyg, så `ArticleTitle` är bara typkontrollerad och byggd.
+
+**Bevis:** testerna skrevs först: 6 röda (fem scheman och kodningsfallet). Efter ändringen gröna.
+
+## 2026-10-10: Båda prompterna avgränsar artikeltexten med samma funktion
+
+**Krav.** Triage tog bort `<artikel>`-taggar ur texten (`neutralize`). Berikningen, där modellen sätter arbetsyta, gjorde det inte (H3). Det är vektorn bakom känd risk 4b, och r19 är fixturen.
+
+**Beslut:** `neutralize` flyttades till `src/llm/prompt.ts` och används av triage och berikning, på både rubrik och text. Den upprepas tills inget mer tas bort: testet visade att `<<artikel>artikel>` blev `<artikel>` med ett enda varv, vilket mitt första försök missade.
+
+**Alternativ:** (a) Kodning av texten (till exempel JSON eller base64 i prompten). Robustare, men modellen läser den sämre och sammanfattningen försämras. (b) Slumpad avgränsare per anrop. Bra komplement när en riktig leverantör finns, men beror på modellens följsamhet. (c) Låta schemavalideringen vara enda skyddet. Den stoppar ogiltiga svar, inte giltiga men felaktiga (risk 4b).
+
+**Känd begränsning:** skyddet minskar risken men tar inte bort den. Att modellen kan välja en giltig men fel arbetsyta kvarstår (fel 4b).
+
+**Bevis:** testet i `test/enrich.spec.ts` var rött (två öppningstaggar i prompten), blev rött igen för den nästlade taggen, och är grönt efter loopen.
+
+## 2026-10-10: Demon tömmer bara den lokala demodatabasen
+
+**Krav.** `npm run demo` kör `TRUNCATE … CASCADE` mot det `DATABASE_URL` som är satt (H4). Testerna har ett skydd mot det sedan fel 38, demon hade inget.
+
+**Beslut:** `assertDemoDatabase` (i `scripts/db.ts`) körs först i demon och vägrar allt utom databasen `bevakning`, och alltid i produktion. Testdatabasen (`*_test`) vägras också, eftersom den hör till testerna.
+
+**Alternativ:** (a) Kräva en flagga (`--yes`). Skyddar mot misstag men inte mot en bekant `DATABASE_URL` i skalet som man glömt. (b) Lägga skyddet i `db()`. Då hade testerna, som använder `db()` mot `*_test`, behövt ett undantag. (c) Bara dokumentera. Samma sak som innan.
+
+**Känd begränsning:** en annan lokal databas som också heter `bevakning` på en annan server godkänns. Skyddet är ett nät mot misstag, inte mot avsikt.
+
+**Bevis:** `test/database-config.spec.ts` skrevs först (kompilerade inte: funktionen fanns inte). Sju fall gröna efteråt.
+
+## 2026-10-10: Mindre rättningar från kodgranskningen
+
+**Beslut:**
+- **Okänd användare eller databasfel (M4).** `loadFromFile` hoppar bara över en profil när användaren saknas (`NotFoundException`). Andra fel stoppar körningen. Annars såg ett databasavbrott ut som att alla ägare saknades.
+- **`sort` som inte är text (M6).** `parseSort` avvisar listor och andra typer med 400. Resten av gränsvalideringen (DTO och zod-pipe för alla endpoints) lämnas till nästa steg.
+- **Adminvyn (H5).** `QueryTester` får `key={userId}` och den väntande frågan nollställs vid användarbyte, så att ett resultat aldrig visas under fel användares namn.
+- **Oanvänt beroende (L3).** `@radix-ui/react-slot` togs bort ur `frontend/`. Den hade hört till en `Button` med `asChild` som aldrig byggdes. `isSameStory`, `similarity` och `embed` ligger kvar: de väntar på klustringen (fel 29) och har tester.
+- **Inaktuella kommentarer och dokument (L1, M1).** "Saknades i startkoden" i tre filer, statusraden i `CLAUDE.md`, fel 39 i statustabellen och radantalet för åtkomstmodulen (300 blev 420).
+- **Regel 5 i `CLAUDE.md`.** Uppgiften säger att koden hanteras utan namn och utan git-historik, och att inga personuppgifter får stå i beslutsloggen eller överlämningen. Regeln sa mer än så (även kod, commits och git-författare) och rättades till det. Historiken skrivs inte om, eftersom författarens eget namn i git är normalt. Alternativet, att skriva om historiken, hade varit en ingripande ändring mot ett krav som inte finns.
+
+**Bevis:** testerna för M4 och `sort` skrevs först och var röda av rätt skäl. Alla 591 plus de nya är gröna efteråt. Granskningens övriga punkter står som "Kodskuld" i `ÖVERLÄMNING.md`.
+
 ## AI-logg
 
 - **2026-10-09, AI hjälpte (`otherSources`-läckan):** AI:n läste utskicksmodulen och hittade att `otherSources` frågade `articles` direkt, förbi åtkomstmodulen. Namn och länkar till källor från artiklar utanför omfånget, flaggade för granskning och i nekade kategorier, kunde alltså nå fel mottagare. Arkitekturtestet missade det eftersom det bara söker efter `from articles`. AI:n skrev först tre röda tester och sedan `sourcesByCluster`, som delar omfångsregler med resten av åtkomstmodulen. Jag granskade lösningen och valde den framför att låta utskicket filtrera själv. Läckan hade inte upptäckts av de ärvda testerna.

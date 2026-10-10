@@ -130,8 +130,8 @@ describe('Dubbletter och idempotens (krav 7)', () => {
     });
   });
 
-  it('en ogiltig URL stoppar inte körningen, utan loggas', async () => {
-    const bad = { ...r01, id: 'bad', url: 'inte en url' };
+  it.each(['inte en url', 'javascript:alert(1)'])('en ogiltig URL (%s) stoppar inte körningen, utan loggas', async (url) => {
+    const bad = { ...r01, id: 'bad', url };
     const report = await enrich.run([bad, r02], NOW);
     expect((await articles()).map((a) => a.raw_id)).toEqual(['r02']);
     expect(report.skipped).toEqual([expect.objectContaining({ rawId: 'bad', reason: 'invalid_url' })]);
