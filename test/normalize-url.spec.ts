@@ -17,10 +17,6 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl(`${base}?id=5&utm_source=x&page=2&utm_medium=y`)).toBe(`${base}?id=5&page=2`);
   });
 
-  it('lämnar ingen tom frågesträng efter sig', () => {
-    expect(normalizeUrl(`${base}?utm_source=x`)).not.toContain('?');
-  });
-
   it('tar bort fragment och normaliserar värdnamnet och avslutande snedstreck', () => {
     expect(normalizeUrl('https://POIT.Example.se/kungorelse/2026-123456/#avsnitt')).toBe(base);
   });

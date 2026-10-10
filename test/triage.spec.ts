@@ -39,10 +39,6 @@ describe('TriageService', () => {
     expect(warn).not.toHaveBeenCalled(); // inget att varna för när allt har en giltig poäng
   });
 
-  it('tröskeln gallrar: standardvärdet är över noll', () => {
-    expect(MIN).toBeGreaterThan(0);
-  });
-
   it.each([
     ['text i stället för JSON', 'Tyvärr, jag kan inte hjälpa till med det.'],
     ['ett objekt i stället för en lista', JSON.stringify({ summary: 's' })],

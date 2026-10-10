@@ -87,6 +87,37 @@ npm test                 # hela sviten
 npm run typecheck
 ```
 
+### Testfiler
+
+184 tester i 19 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
+testdatabasen.
+
+| Fil | Vad den testar | Tester | Databas |
+|---|---|---|---|
+| `access.spec.ts` | Behörighet: arbetsytan som hård gräns (även akuta), nekade entiteter och kategorier, ingen fulltext, vitlista för `sort`, flaggade artiklar | 10 | ja |
+| `raw-text.spec.ts` | Råtext lämnar aldrig systemet: mejl, export och arkitekturregel för `full_text`, samt mejl utan sammanfattning | 4 | ja |
+| `render.spec.ts` | Mejlrendering: escapad text, bara http(s)-länkar i huvudlänk och "Även:" | 12 | nej |
+| `export.spec.ts` | Export: roll i `AuthGuard`, `?userId=` bara för admin, skydd mot CSV-formler | 14 | delvis |
+| `app.spec.ts` | Servern över HTTP: 401/403/400, admin, `PORT`, bindning till `127.0.0.1` | 10 | ja |
+| `digest.spec.ts` | Utskick: andra källor inom omfånget, tröskel och sortering före begränsning | 8 | ja |
+| `enrich.spec.ts` | Berikningen: kategori och arbetsyta ur fasta listor, fail closed, relevans, triage i pipelinen, stubben | 25 | delvis |
+| `ingest.spec.ts` | Inläsning: teckenkodning, tidszon (Europe/Stockholm), ogiltigt datum | 22 | delvis |
+| `dedupe.spec.ts` | Dubbletter och idempotens: normaliserad URL som identitet, omkörning, d02 och r09 | 12 | ja |
+| `normalize-url.spec.ts` | `normalizeUrl`: spårningsparametrar, fragment, värdnamn | 5 | nej |
+| `triage.spec.ts` | Triage: ogiltiga svar släpper inte igenom något, poängintervall, omgångar, avgränsning mot injektion | 15 | nej |
+| `score.spec.ts` | Poängformeln: högst viktade entiteten, källvikt, färskhet, ingen NaN | 4 | nej |
+| `similarity.spec.ts` | Cosinuslikhet och `isSameStory` | 8 | nej |
+| `entity-matcher.spec.ts` | Entitetsmatchning: tomma termer, genitiv, Unicode-gränser, skiftläge | 11 | nej |
+| `entity-import.spec.ts` | Entitetsimport: validering, ihopslagning, mappning, `meta_page_id`, inga vd-namn | 11 | ja |
+| `architecture.spec.ts` | Arkitekturregel: bara `src/access` läser innehållstabellerna (en textsökning, se fel 23) | 1 | nej |
+| `database-config.spec.ts` | `resolveDatabaseUrl` och att `knexProvider` använder den | 4 | nej |
+| `pipeline-config.spec.ts` | Tröskeln för triage ur miljön (tom eller ogiltig ger standardvärdet, inte 0) | 2 | nej |
+| `test-database.spec.ts` | Testdatabasen: `_test`-skyddet och att testerna körs mot `bevakning_test` | 6 | delvis |
+
+Hjälpfiler (inga tester): `helpers.ts` (testapp, `seedArticles`, `scriptedLlm`), `test-database.ts`, `jest.env.ts` och
+`jest.global-setup.ts`.
+
 **Testerna har en egen databas.** De kör mot `bevakning_test` på samma Postgres-server som demon, och `npm test`
 rör därför aldrig demodatan i `bevakning`. Testdatabasen skapas automatiskt första gången (Jest `globalSetup`, se
 `test/jest.global-setup.ts`) och tabellerna skapas av migrationerna, så ingen manuell uppsättning behövs. Du behöver

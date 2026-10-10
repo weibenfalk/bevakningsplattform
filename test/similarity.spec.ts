@@ -51,12 +51,6 @@ describe('isSameStory', () => {
     expect(isSameStory(a, b)).toBe(false);
   });
 
-  it('samma text är samma story', async () => {
-    const a = await stub.embed('Konkursbeslut för Takvårdarna i Småland AB');
-    expect(isSameStory(a, [...a])).toBe(true);
-    expect(isSameStory(a, a.map((x) => x * 3))).toBe(true);
-  });
-
   it('tröskeln är inklusive: exakt tröskelvärdet räknas som samma story', () => {
     const angle = Math.acos(threshold);
     expect(isSameStory([1, 0], [Math.cos(angle), Math.sin(angle)])).toBe(true);

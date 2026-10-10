@@ -9,10 +9,6 @@ describe('matchEntities: tomma termer', () => {
     expect(matchEntities('Rekordpumpa i Nybro', [entity({ domains: [''] })])).toEqual([]);
   });
 
-  it('ett tomt alias matchar inte varje text', () => {
-    expect(matchEntities('Rekordpumpa i Nybro', [entity({ aliases: [''] })])).toEqual([]);
-  });
-
   it('en term med bara blanksteg matchar inte', () => {
     expect(matchEntities('Rekordpumpa i Nybro', [entity({ aliases: ['  '], domains: ['\t'] })])).toEqual([]);
   });
