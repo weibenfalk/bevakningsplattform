@@ -18,6 +18,7 @@ import { EntityImportService } from '../src/import/entity-import.service';
 import { LLM, LlmProvider } from '../src/llm/llm.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
 import { PipelineService } from '../src/pipeline/pipeline.service';
+import { RunLogService } from '../src/pipeline/run-log.service';
 import { RawItem } from '../src/types';
 
 const brokenAi = process.argv.includes('--trasig-ai');
@@ -45,7 +46,7 @@ const readJson = <T>(file: string): T => JSON.parse(readFileSync(`data/${file}`,
 async function main() {
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
-  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes, profile_matches, profile_versions, profiles, users RESTART IDENTITY CASCADE');
+  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes, profile_matches, profile_versions, profiles, users, pipeline_runs RESTART IDENTITY CASCADE');
 
   const users = readJson<{ id: string; name: string; role: string; scopes: string[] }[]>('users.json');
   await knex('content_scopes').insert(users.map((u) => ({ user_id: u.id, spaces: u.scopes })));
@@ -79,6 +80,15 @@ async function main() {
   console.log(`   Profiler (data/profiles.json): ${pipeline.profiles.loaded.length} giltiga, ${pipeline.profiles.skipped.length} hoppades över`);
   for (const p of pipeline.profiles.skipped) console.log(`   hoppade över profilen ${p.id}: ${p.reason}`);
   console.log(`   Profilmatchning: ${pipeline.matching.profilesRun} profiler kördes mot ${pipeline.enrich.stored.length} nya artiklar, ${pipeline.matching.rows} träffar sparade`);
+
+  console.log('\n   Körningar (tabellen pipeline_runs, krav 7):');
+  console.log(`   ${'steg'.padEnd(14)} ${'status'.padEnd(7)} ${'tid'.padStart(6)} ${'in'.padStart(4)} ${'ut'.padStart(4)} ${'överhoppade'.padStart(12)}  anmärkning`);
+  for (const r of await app.get(RunLogService).list()) {
+    const ms = r.finishedAt ? `${r.finishedAt.getTime() - r.startedAt.getTime()} ms` : '-';
+    const note = r.error ?? Object.entries(r.details).map(([k, v]) => `${k}=${v}`).join(', ');
+    const n = (v: number | null) => String(v ?? '-');
+    console.log(`   ${r.step.padEnd(14)} ${r.status.padEnd(7)} ${ms.padStart(6)} ${n(r.itemsIn).padStart(4)} ${n(r.itemsOut).padStart(4)} ${n(r.itemsSkipped).padStart(12)}  ${note}`);
+  }
 
   console.log('\n== 3. Vad varje användare får se (via ArticleAccessService, samma väg som mejl, sök och export)');
   mkdirSync('out', { recursive: true });

@@ -13,6 +13,7 @@ import { relevance } from './score';
 import { contentHash, SkippedItem, splitFresh } from './dedupe';
 import { prepareItem } from './ingest';
 import { normalizeUrl } from './normalize-url';
+import { RunLogService } from './run-log.service';
 import { TriageService } from './triage.service';
 
 const SYSTEM_PROMPT = `Du analyserar nyhetstexter åt en svensk koncern inom takvård och fönsterputs.
@@ -48,78 +49,94 @@ export class EnrichService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(SOURCE_WEIGHTS) private readonly sourceWeights: Map<string, number>,
     private readonly access: ArticleAccessService,
+    private readonly runs: RunLogService,
   ) {}
 
   async run(items: RawItem[], now: Date = this.clock.now()): Promise<EnrichReport> {
     const entities = await this.loadEntities();
-    // Reparera teckenkodning och tolka tider före allt annat, så att triage och matchning ser rätt text.
+    // Inläsning: reparera teckenkodning, tolka tider och såll bort dubbletter och redan sparade poster före triage
+    // och berikning (idempotens, krav 7). Steget loggas i pipeline_runs.
     const problems = new Map<RawItem, string[]>();
-    const entries = items.map((raw) => {
-      const p = prepareItem(raw);
-      problems.set(p.item, p.problems);
-      for (const problem of p.problems) this.log.warn(`${raw.id}: ${problem}`);
-      return { raw, prepared: p.item };
+    const { fresh, skipped, alreadyStored } = await this.runs.record('ingest', async (run) => {
+      run.set({ itemsIn: items.length });
+      const entries = items.map((raw) => {
+        const p = prepareItem(raw);
+        problems.set(p.item, p.problems);
+        for (const problem of p.problems) this.log.warn(`${raw.id}: ${problem}`);
+        return { raw, prepared: p.item };
+      });
+      const result = await splitFresh((urls, rawIds) => this.access.storedIdentities(urls, rawIds), entries);
+      await this.recordSkipped(result.skipped);
+      run.set({ itemsOut: result.fresh.length, itemsSkipped: result.skipped.length, alreadyStored: result.alreadyStored });
+      return result;
     });
 
-    // Dubbletter och redan sparade poster sållas bort före triage och berikning (idempotens, krav 7).
-    const { fresh, skipped, alreadyStored } = await splitFresh((urls, rawIds) => this.access.storedIdentities(urls, rawIds), entries);
-    await this.recordSkipped(skipped);
-    const prepared = fresh.map((e) => e.prepared);
-    const triaged = await this.triage.filter(prepared);
-    const candidates = triaged.kept;
-    this.log.log(`${candidates.length} av ${items.length} gick vidare till berikning (${triaged.dropped.length} sållades bort, ${triaged.unscored.length} utan giltig poäng)`);
+    // Berikning: triage och AI-berikning av de nya posterna. Steget loggas i pipeline_runs.
+    const stored = await this.runs.record('enrich', async (run) => {
+      run.set({ itemsIn: fresh.length });
+      const prepared = fresh.map((e) => e.prepared);
+      const triaged = await this.triage.filter(prepared);
+      const candidates = triaged.kept;
+      this.log.log(`${candidates.length} av ${items.length} gick vidare till berikning (${triaged.dropped.length} sållades bort, ${triaged.unscored.length} utan giltig poäng)`);
 
-    const stored: StoredArticle[] = [];
-    for (const item of candidates) {
-      const raw = await this.llm.complete({
-        task: 'enrich',
-        system: SYSTEM_PROMPT,
-        prompt: `<artikel>\n${item.title}\n\n${item.text}\n</artikel>`,
-      });
+      const stored: StoredArticle[] = [];
+      for (const item of candidates) {
+        const raw = await this.llm.complete({
+          task: 'enrich',
+          system: SYSTEM_PROMPT,
+          prompt: `<artikel>\n${item.title}\n\n${item.text}\n</artikel>`,
+        });
 
-      const parsed = EnrichmentSchema.safeParse(extractJson(raw));
-      if (!parsed.success) this.log.warn(`Ogiltigt svar för ${item.id}, sparas flaggad för granskning`);
+        const parsed = EnrichmentSchema.safeParse(extractJson(raw));
+        if (!parsed.success) this.log.warn(`Ogiltigt svar för ${item.id}, sparas flaggad för granskning`);
 
-      const data = parsed.success
-        ? parsed.data
-        // Ogiltigt svar: ingen sammanfattning. Originaltexten får aldrig användas i dess ställe.
-        : { summary: null, business_areas: [] as never[], categories: [] as never[], urgency: 'info' as const, impact: 0, confidence: 0 };
+        const data = parsed.success
+          ? parsed.data
+          // Ogiltigt svar: ingen sammanfattning. Originaltexten får aldrig användas i dess ställe.
+          : { summary: null, business_areas: [] as never[], categories: [] as never[], urgency: 'info' as const, impact: 0, confidence: 0 };
 
-      const entityMatches = parsed.success
-        ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
-        : [];
-      const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems.get(item) ?? []);
+        const entityMatches = parsed.success
+          ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
+          : [];
+        const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems.get(item) ?? []);
 
-      const inserted: { id: number }[] = await this.knex('articles')
-        .insert({
-          raw_id: item.id,
-          // Källans id (till exempel "di"), så att frågor som source:di kan träffa.
-          source_name: item.source,
-          url: normalizeUrl(item.url),
-          title: item.title,
-          full_text: item.text,
-          content_hash: contentHash(item),
-          summary: data.summary,
-          // Allt som inte kan poängsättas eller är ogiltigt: tom arbetsyta och flaggad.
-          // Fel får aldrig leda till att en artikel når fler.
-          spaces: reviewReason ? [] : data.business_areas,
-          needs_review: reviewReason !== null,
-          review_reason: reviewReason,
-          categories: data.categories,
-          entity_ids: entityMatches,
-          urgency: data.urgency,
-          impact: data.impact,
-          confidence: data.confidence,
-          relevance: score,
-          published_at: item.published_at || null,
-        })
-        // Sista skyddet: databasen har unika url och raw_id. Dubbletter har redan sållats bort ovan.
-        .onConflict()
-        .ignore()
-        .returning('id');
-      // Tomt svar betyder att databasen avvisade raden som dubblett. Då är artikeln inte ny.
-      if (inserted.length) stored.push({ id: inserted[0].id, title: item.title, body: item.text });
-    }
+        const inserted: { id: number }[] = await this.knex('articles')
+          .insert({
+            raw_id: item.id,
+            // Källans id (till exempel "di"), så att frågor som source:di kan träffa.
+            source_name: item.source,
+            url: normalizeUrl(item.url),
+            title: item.title,
+            full_text: item.text,
+            content_hash: contentHash(item),
+            summary: data.summary,
+            // Allt som inte kan poängsättas eller är ogiltigt: tom arbetsyta och flaggad.
+            // Fel får aldrig leda till att en artikel når fler.
+            spaces: reviewReason ? [] : data.business_areas,
+            needs_review: reviewReason !== null,
+            review_reason: reviewReason,
+            categories: data.categories,
+            entity_ids: entityMatches,
+            urgency: data.urgency,
+            impact: data.impact,
+            confidence: data.confidence,
+            relevance: score,
+            published_at: item.published_at || null,
+          })
+          // Sista skyddet: databasen har unika url och raw_id. Dubbletter har redan sållats bort ovan.
+          .onConflict()
+          .ignore()
+          .returning('id');
+        // Tomt svar betyder att databasen avvisade raden som dubblett. Då är artikeln inte ny.
+        if (inserted.length) {
+          stored.push({ id: inserted[0].id, title: item.title, body: item.text });
+          run.set({ itemsOut: stored.length });
+        }
+      }
+      // Överhoppade här är de som triage sållade bort (eller som databasen avvisade som dubblett).
+      run.set({ itemsOut: stored.length, itemsSkipped: fresh.length - stored.length, triageDropped: triaged.dropped.length, triageUnscored: triaged.unscored.length });
+      return stored;
+    });
     return { skipped: skipped.map(({ raw: _raw, ...rest }) => rest), alreadyStored, stored };
   }
 

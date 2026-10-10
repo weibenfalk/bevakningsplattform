@@ -7,6 +7,7 @@ import { Article, explain, matches } from '../query/evaluator';
 import { parse } from '../query/parser';
 import { QuerySyntaxError } from '../query/tokenizer';
 import { StoredArticle } from './enrich.service';
+import { RunLogService } from './run-log.service';
 
 export interface MatchReport {
   /** Profiler som kördes. */
@@ -33,9 +34,23 @@ export class ProfileMatchService {
     @Inject(KNEX) private readonly knex: Knex,
     private readonly profiles: ProfileService,
     private readonly access: ArticleAccessService,
+    private readonly runs: RunLogService,
   ) {}
 
+  /**
+   * Steget loggas i pipeline_runs: in är antal artiklar, ut är antal sparade träffar och överhoppade är profiler
+   * som inte gick att tolka.
+   */
   async run(stored: StoredArticle[]): Promise<MatchReport> {
+    return this.runs.record('profile_match', async (run) => {
+      run.set({ itemsIn: stored.length });
+      const report = await this.match(stored);
+      run.set({ itemsOut: report.rows, itemsSkipped: report.invalid.length, profilesRun: report.profilesRun });
+      return report;
+    });
+  }
+
+  private async match(stored: StoredArticle[]): Promise<MatchReport> {
     const report: MatchReport = { profilesRun: 0, invalid: [], rows: 0 };
     if (stored.length === 0) return report;
 

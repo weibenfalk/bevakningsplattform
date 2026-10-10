@@ -85,6 +85,8 @@ hoppas över. De övriga körs mot de nya artiklarna efter berikningen, och trä
 per användare vilka av hens egna profiler som träffade vilka artiklar och med vilken term, och mejlet i `out/` har
 "Varför: profil (term)" under artikeln. Profilerna styr inte urvalet: Kalle får r06 (rotavdraget) även om ingen av hans profiler träffar den.
 
+Demon skriver också ut en sammanfattning av körningarna från tabellen `pipeline_runs` (steg, status, tid, antal in, ut och överhoppade). Varje steg loggar sig själv, så sammanfattningen kommer från databasen och inte från returvärdena.
+
 ## Frågespråket (`npm run query`)
 
 `npm run query -- "<fråga>"` visar vad frågespråket (`src/query/`) gör med en fråga. Ingen databas behövs, datan
@@ -124,7 +126,7 @@ npm run typecheck
 
 ### Testfiler
 
-401 tester i 29 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+413 tester i 30 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -154,6 +156,7 @@ testdatabasen.
 | `query-profiles.spec.ts` | Profilerna i `data/profiles.json`: de två trasiga ger fel, de giltiga träffar rätt artiklar | 11 | nej |
 | `profile-matching.spec.ts` | Profiler in (versioner, trasiga hoppas över), matchning i pipelinen, idempotens, ägarens omfång, fält som saknar data (fail closed) | 22 | ja |
 | `profile-digest.spec.ts` | "Varför: …" i mejlet: bara egna profiler och senaste version, urvalet oförändrat | 10 | delvis |
+| `pipeline-runs.spec.ts` | Krav 7: `pipeline_runs` får en rad per körning av inläsning, berikning och profilmatchning (start, slut, antal, fel) | 12 | ja |
 | `query-data.spec.ts` | Datan i `npm run query`: samma filer som demon (inkl. r19–r22) och reparerad teckenkodning | 3 | nej |
 | `query-describe.spec.ts` | Utskriften i `npm run query`: tokens, träd, träffande termer och felmarkering | 11 | nej |
 | `query-no-regex.spec.ts` | Krav 4: ingen regex i `src/query` (kontrolleras med TypeScript-kompilatorn) | 3 | nej |
@@ -185,7 +188,7 @@ inte köra `npm run migrate` för testerna.
 | `src/llm/` | `LlmProvider`-gränssnittet och stubben |
 | `src/query/` | Frågespråket: tokenizer, parser, utvärdering |
 | `src/profiles/` | Läser in profiler ur `data/profiles.json`, versionerade |
-| `src/pipeline/pipeline.service.ts`, `profile-match.service.ts` | Hela körningen (profiler, berikning, profilmatchning) och matchningen i batch |
+| `src/pipeline/pipeline.service.ts`, `profile-match.service.ts`, `run-log.service.ts` | Hela körningen (profiler, berikning, profilmatchning), matchningen i batch och körloggen i `pipeline_runs` |
 | `src/digest/`, `src/admin/` | Utskick och export |
 | `migrations/` | Schemat. Den första migrationen är hela datamodellen (krav 2). Tabellerna för behörighet, profiler och utskick används inte av koden än |
 | `scripts/demo.ts` | Demon (databasen `bevakning`) |

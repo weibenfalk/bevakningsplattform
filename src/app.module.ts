@@ -13,6 +13,7 @@ import { EnrichService } from './pipeline/enrich.service';
 import { PipelineService } from './pipeline/pipeline.service';
 import { ProfileMatchService } from './pipeline/profile-match.service';
 import { ProfileService } from './profiles/profile.service';
+import { RunLogService } from './pipeline/run-log.service';
 import { TrendService } from './pipeline/trend.service';
 import { TriageService } from './pipeline/triage.service';
 
@@ -31,6 +32,7 @@ import { TriageService } from './pipeline/triage.service';
     ProfileService,
     ProfileMatchService,
     PipelineService,
+    RunLogService,
     TriageService,
     TrendService,
     EntityImportService,
