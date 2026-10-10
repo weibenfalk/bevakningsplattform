@@ -69,7 +69,7 @@ export class EnrichService {
         return { raw, prepared: p.item, problems: p.problems };
       });
       const result = await splitFresh((urls, rawIds) => this.access.storedIdentities(urls, rawIds), entries);
-      await this.recordSkipped(result.skipped);
+      await this.recordSkipped(result.skipped, now);
       run.set({
         itemsOut: result.fresh.length + result.updates.length,
         itemsSkipped: result.skipped.length,
@@ -114,6 +114,8 @@ export class EnrichService {
             relevance: score,
             is_correction: isCorrection(item),
             published_at: item.published_at || null,
+            // Pipelinens klocka och inte databasens, så att rensningen efter 90 dagar räknar likadant för artiklar och råposter.
+            created_at: now,
           })
           // Sista skyddet: databasen har unika url och raw_id. Dubbletter har redan sållats bort ovan.
           .onConflict()
@@ -139,7 +141,7 @@ export class EnrichService {
           rejected.push({ raw: update.entry.raw, rawId: update.entry.raw.id, url: normalizeUrl(update.entry.prepared.url), reason: 'invalid_update', existingRawId: update.existingRawId });
         }
       }
-      await this.recordSkipped(rejected);
+      await this.recordSkipped(rejected, now);
 
       // Överhoppade här är de som triage sållade bort, uppdateringar som inte gick att ta emot (eller som databasen avvisade som dubblett).
       const itemsIn = fresh.length + updates.length;
@@ -216,11 +218,11 @@ export class EnrichService {
   }
 
   /** Sparar överhoppade poster med hela råposten, så att inget försvinner tyst. Unik per post, så en omkörning inte dubblerar loggen. */
-  private async recordSkipped(skipped: (SkippedItem & { raw: RawItem })[]): Promise<void> {
+  private async recordSkipped(skipped: (SkippedItem & { raw: RawItem })[], now: Date): Promise<void> {
     for (const s of skipped) {
       this.log.warn(`Hoppade över ${s.rawId} (${s.reason})${s.existingRawId ? `, krockar med ${s.existingRawId}` : ''}: ${s.url}`);
       await this.knex('skipped_items')
-        .insert({ raw_id: s.rawId, url: s.url, reason: s.reason, existing_raw_id: s.existingRawId ?? null, payload: JSON.stringify(s.raw) })
+        .insert({ raw_id: s.rawId, url: s.url, reason: s.reason, existing_raw_id: s.existingRawId ?? null, payload: JSON.stringify(s.raw), created_at: now })
         .onConflict(['raw_id', 'url', 'reason'])
         .ignore();
     }

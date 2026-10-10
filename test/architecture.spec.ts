@@ -26,11 +26,28 @@ const WRITE_EXCEPTIONS: Exception[] = [
     why: 'Berikningen loggar överhoppade poster med hela råposten (insert), så att inget försvinner tyst (krav 7).',
   },
   {
+    file: 'src/pipeline/purge.service.ts',
+    table: 'articles',
+    why: 'Rensningen efter 90 dagar nollar full_text (update). Den lämnar inget ut och har inget användaromfång att lägga på.',
+    extraChain: ['whereNotNull', 'whereRaw'],
+    chainWhy: 'Urvalet av gamla rader är ett villkor i själva uppdateringen (ålder och att texten finns kvar), och det går inte att uttrycka med where/whereIn. whereRaw får bara ha SQL som inte nämner någon innehållstabell (skannern underkänner det), så det kan inte bli en delfråga som läser.',
+  },
+  {
+    file: 'src/pipeline/purge.service.ts',
+    table: 'skipped_items',
+    why: 'Rensningen efter 90 dagar tömmer payload på gamla överhoppade poster (update). Den lämnar inget ut.',
+    extraChain: ['whereRaw'],
+    chainWhy: 'Villkoret "payload är inte redan tömd" är jämförelse av en jsonb-kolumn och kan inte skrivas med where. Samma begränsning som för articles: raw-SQL:en får inte nämna en innehållstabell.',
+  },
+  {
     file: 'src/pipeline/profile-match.service.ts',
     table: 'profile_matches',
     why: 'Profilmatchningen ersätter en profils träffar för de nya artiklarna (delete och insert). Läsning av träffarna går via åtkomstmodulen.',
   },
 ];
+
+/** Villkorsmetoder ett undantag får lägga till i skrivkedjan. Aldrig select, first, count, join och annat som läser. */
+const ALLOWED_EXTRA_CHAIN = ['whereNotNull', 'whereNull', 'whereRaw'];
 
 const FILES = globSync('src/**/*.ts', { ignore: 'src/access/**' }).sort();
 const scan = FILES.map((file) => scanSource(file, readFileSync(file, 'utf8'), WRITE_EXCEPTIONS));
@@ -55,6 +72,11 @@ describe('arkitekturregel (krav 1): bara src/access läser innehållstabellerna'
   it('varje undantag har en motivering och gäller en innehållstabell i pipelinen', () => {
     for (const e of WRITE_EXCEPTIONS) {
       expect(e.why.length).toBeGreaterThan(20);
+      // Ett undantag som tillåter fler metoder i skrivkedjan måste säga varför, och får inte tillåta läsmetoder.
+      if (e.extraChain) {
+        expect((e.chainWhy ?? '').length).toBeGreaterThan(20);
+        expect(e.extraChain.filter((m) => !ALLOWED_EXTRA_CHAIN.includes(m))).toEqual([]);
+      }
       expect(e.file.startsWith('src/pipeline/')).toBe(true);
       expect(CONTENT_TABLES).toContain(e.table);
     }
@@ -116,6 +138,34 @@ describe('detektorn: hittar alla sätt att läsa en innehållstabell', () => {
   });
 
   describe('undantag för skrivning', () => {
+    const medVillkor = (extraChain?: string[]): Exception[] => [{ file: 'src/digest/exempel.ts', table: 'articles', why: 'exempel för testet av detektorn', extraChain, chainWhy: 'exempel' }];
+    const uppdatering = "trx('articles').where((q) => q.whereNotNull('x')).whereRaw('a < ?', [1]).update({ x: null })";
+    const kedja = "trx('articles').whereNotNull('x').whereRaw('a < ?', [1]).update({ x: null })";
+
+    it('whereNotNull och whereRaw i skrivkedjan underkänns om undantaget inte uttryckligen tillåter dem', () => {
+      expect(hitta(kedja, medVillkor()).length).toBeGreaterThan(0);
+      expect(hitta(kedja, medVillkor(['whereNotNull'])).length).toBeGreaterThan(0);
+    });
+
+    it('… och släpps igenom bara när undantaget nämner just dem', () => {
+      expect(hitta(kedja, medVillkor(['whereNotNull', 'whereRaw']))).toEqual([]);
+    });
+
+    it('ett undantag för villkor öppnar inte för läsning: select, first och count underkänns fortfarande', () => {
+      const undantag = medVillkor(['whereNotNull', 'whereRaw']);
+      expect(hitta("trx('articles').whereNotNull('x').first()", undantag).length).toBeGreaterThan(0);
+      expect(hitta("trx('articles').whereNotNull('x').update({ x: null }).select('title')", undantag).length).toBeGreaterThan(0);
+      expect(hitta("trx('articles').whereRaw('id in (select 1)').count()", undantag).length).toBeGreaterThan(0);
+    });
+
+    it('raw-SQL i ett villkor som nämner en innehållstabell underkänns även med undantaget (ingen delfråga som läser)', () => {
+      expect(hitta("trx('articles').whereRaw('id in (select article_id from profile_matches)').update({ x: null })", medVillkor(['whereRaw'])).length).toBeGreaterThan(0);
+    });
+
+    it('en callback i where döljer ingenting: en delfråga mot en innehållstabell hittas inne i den', () => {
+      expect(hitta("trx('articles').where((q) => q.whereIn('id', trx('feedback').select('article_id'))).update({ x: null })", undantag).length).toBeGreaterThan(0);
+    });
+
     const undantag: Exception[] = [{ file: 'src/digest/exempel.ts', table: 'articles', why: 'exempel för testet av detektorn' }];
 
     it.each([

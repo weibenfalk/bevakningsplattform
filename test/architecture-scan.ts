@@ -40,6 +40,9 @@ export interface Exception {
   table: string;
   /** Varför just den här skrivningen får ligga utanför åtkomstmodulen. */
   why: string;
+  /** Extra villkorsmetoder som skrivkedjan får innehålla i just den här filen och tabellen. Kräver `chainWhy`. */
+  extraChain?: string[];
+  chainWhy?: string;
 }
 
 export interface Finding {
@@ -84,7 +87,7 @@ function isKnexCallee(expr: ts.Expression): boolean {
 }
 
 /** Är det här tabellnamnet i ett anrop som bara skriver, till exempel `trx('profile_matches').where(...).delete()`? */
-function isWriteUse(literal: ts.Node): boolean {
+function isWriteUse(literal: ts.Node, extraChain: string[] = []): boolean {
   const call = literal.parent;
   if (!ts.isCallExpression(call) || call.arguments[0] !== literal || !isKnexCallee(call.expression)) return false;
 
@@ -101,7 +104,7 @@ function isWriteUse(literal: ts.Node): boolean {
     methods.push(access.name.text);
     current = next;
   }
-  return methods.some((m) => WRITE_METHODS.includes(m)) && methods.every((m) => WRITE_CHAIN_METHODS.includes(m));
+  return methods.some((m) => WRITE_METHODS.includes(m)) && methods.every((m) => WRITE_CHAIN_METHODS.includes(m) || extraChain.includes(m));
 }
 
 export function scanSource(file: string, source: string, exceptions: Exception[]): ScanResult {
@@ -117,7 +120,9 @@ export function scanSource(file: string, source: string, exceptions: Exception[]
     const text = stringText(node);
     if (text !== null) {
       for (const table of new Set(words(text).filter((w) => CONTENT_TABLES.includes(w)))) {
-        const exception = isWriteUse(node) ? exceptions.find((e) => e.file === file && e.table === table) : undefined;
+        // Fler villkorsmetoder i skrivkedjan går bara med ett uttalat undantag för just den här filen och tabellen.
+        const candidate = exceptions.find((e) => e.file === file && e.table === table);
+        const exception = candidate && isWriteUse(node, candidate.extraChain) ? candidate : undefined;
         if (exception) used.add(exception);
         else report(node, `rör innehållstabellen ${table} utanför src/access`);
       }

@@ -42,8 +42,8 @@ describe('mejlrendering utan sammanfattning', () => {
 });
 
 describe('arkitekturregel: råtext', () => {
-  it('bara berikningen skriver full_text, och åtkomstmodulen nämner den bara för att undanta den', () => {
-    const allowed = ['src/pipeline/enrich.service.ts', 'src/access/article-access.service.ts'];
+  it('bara berikningen skriver full_text, rensningen nollar den, och åtkomstmodulen nämner den bara för att undanta den', () => {
+    const allowed = ['src/pipeline/enrich.service.ts', 'src/pipeline/purge.service.ts', 'src/access/article-access.service.ts'];
     const offenders = globSync('src/**/*.ts', { ignore: allowed })
       .filter((file) => /full_text|fullText/.test(readFileSync(file, 'utf8')));
     expect(offenders).toEqual([]);

@@ -14,6 +14,10 @@ export const pipelineConfig = {
   dedupe: {
     sameStoryThreshold: envNumber('DEDUPE_THRESHOLD', 0.92),
   },
+  retention: {
+    // Specen: fulltext lagras bara för bearbetning och rensas efter 90 dagar.
+    days: 90,
+  },
   digest: {
     threshold: 55,
     maxItems: 18,

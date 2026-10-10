@@ -59,6 +59,8 @@ export async function up(knex: Knex): Promise<void> {
       needs_review  boolean NOT NULL DEFAULT false,
       review_reason text,
       published_at  timestamptz,
+      -- När artikeln sparades, enligt pipelinens klocka (inte databasens). Rensningen efter 90 dagar räknar från den när publiceringsdatum saknas.
+      created_at    timestamptz NOT NULL DEFAULT now(),
       -- Tidpunkten för den version som gäller nu, om källan har uppdaterat artikeln (d02 uppdaterar r02).
       updated_at    timestamptz,
       -- Artikeln är en uppdatering av en tidigare version (uppföljning, specens avsnitt 5).

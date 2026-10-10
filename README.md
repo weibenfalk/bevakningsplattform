@@ -15,6 +15,7 @@ npm run migrate        # skapar tabellerna
 npm run demo           # kör pipelinen på testdatan och fyller databasen `bevakning`
 npm start              # startar servern på http://127.0.0.1:3000
 npm run query -- "Rikstak AND NOT pumpa*"   # prövar en fråga mot testdatan, utan databas
+npm run purge          # rensar fulltext och råposter äldre än 90 dagar (mot pipelinens klocka)
 ```
 
 Stoppa och töm databasen med `npm run db:down`.
@@ -130,7 +131,7 @@ npm run typecheck
 
 ### Testfiler
 
-481 tester i 34 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+506 tester i 35 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -151,7 +152,7 @@ testdatabasen.
 | `similarity.spec.ts` | Cosinuslikhet och `isSameStory` | 8 | nej |
 | `entity-matcher.spec.ts` | Entitetsmatchning: tomma termer, genitiv, Unicode-gränser, skiftläge | 11 | nej |
 | `entity-import.spec.ts` | Entitetsimport: validering, ihopslagning, mappning, `meta_page_id`, inga vd-namn | 11 | ja |
-| `architecture.spec.ts` | Krav 1: bara `src/access` läser innehållstabellerna (TypeScript-kompilatorn, se fel 23), undantag bara för skrivning i pipelinen, och detektorn mot 18 sätt att läsa | 38 | nej |
+| `architecture.spec.ts` | Krav 1: bara `src/access` läser innehållstabellerna (TypeScript-kompilatorn, se fel 23), undantag bara för skrivning i pipelinen, uttalade undantag för villkorsmetoder, och detektorn mot 18 sätt att läsa | 43 | nej |
 | `database-config.spec.ts` | `resolveDatabaseUrl` och att `knexProvider` använder den | 4 | nej |
 | `pipeline-config.spec.ts` | Tröskeln för triage ur miljön (tom eller ogiltig ger standardvärdet, inte 0) | 2 | nej |
 | `query-tokenizer.spec.ts` | Frågespråkets tokenizer: ord, fraser, NEAR, å/ä/ö, wildcard och syntaxfel med position | 30 | nej |
@@ -164,6 +165,7 @@ testdatabasen.
 | `delivery.spec.ts` | Utskicksloggen i utgåvor och leveranser (inget skickas igen), uppföljningar och rättelser som alltid är med | 22 | ja |
 | `day2.spec.ts` | Dag 2 med de riktiga posterna: d01, d02, d05 och vad varje användare får | 8 | ja |
 | `correction.spec.ts` | Vad som räknas som rättelse | 11 | nej |
+| `purge.spec.ts` | Rensning efter 90 dagar (fel 35): fulltext och råposter, gränsen mot den fasta klockan, artiklar utan datum, idempotens, loggning i `pipeline_runs` | 20 | ja |
 | `pipeline-runs.spec.ts` | Krav 7: `pipeline_runs` får en rad per körning av inläsning, berikning och profilmatchning (start, slut, antal, fel) | 10 | ja |
 | `query-data.spec.ts` | Datan i `npm run query`: samma filer som demon (inkl. r19–r22) och reparerad teckenkodning | 2 | nej |
 | `query-describe.spec.ts` | Utskriften i `npm run query`: tokens, träd, träffande termer och felmarkering | 12 | nej |

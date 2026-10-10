@@ -3,7 +3,7 @@ import { Knex } from 'knex';
 import { KNEX } from '../db/knex.provider';
 
 /** Stegen som loggar sina körningar (krav 7). */
-export type PipelineStep = 'ingest' | 'enrich' | 'profile_match';
+export type PipelineStep = 'ingest' | 'enrich' | 'profile_match' | 'purge';
 
 /**
  * Det ett steg rapporterar om sig självt. `itemsIn`, `itemsOut` och `itemsSkipped` har samma betydelse i alla steg

@@ -11,6 +11,7 @@ import { LLM } from './llm/llm.provider';
 import { StubProvider } from './llm/stub.provider';
 import { EnrichService } from './pipeline/enrich.service';
 import { PipelineService } from './pipeline/pipeline.service';
+import { PurgeService } from './pipeline/purge.service';
 import { ProfileMatchService } from './pipeline/profile-match.service';
 import { ProfileService } from './profiles/profile.service';
 import { RunLogService } from './pipeline/run-log.service';
@@ -33,6 +34,7 @@ import { TriageService } from './pipeline/triage.service';
     ProfileMatchService,
     PipelineService,
     RunLogService,
+    PurgeService,
     TriageService,
     TrendService,
     EntityImportService,
