@@ -104,6 +104,13 @@ describe('Relevans kopplad till pipelinen', () => {
     expect(html).toContain('Konkursbeslut');
   });
 
+  it('uppdelningen av poängen sparas när poängen räknas ut, och summerar till den', async () => {
+    await useLlm(llmWith({})).run([item], NOW);
+    const saved = await row();
+    expect(saved.score_breakdown.score).toBe(saved.relevance);
+    expect(saved.score_breakdown.components.map((c: { key: string }) => c.key)).toEqual(['impact', 'entity', 'source', 'freshness']);
+  });
+
   it('källvikten kommer från sources.json (Bolagsverket väger mer än en blogg)', async () => {
     const enrich = useLlm(llmWith({}));
     await enrich.run([item], NOW);

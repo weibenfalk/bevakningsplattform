@@ -71,6 +71,53 @@ curl -i -H 'x-user-id: u-anna' -H 'x-user-role: admin' 'http://127.0.0.1:3000/ex
 Svaret är CSV med kolumnerna `id,title,url,relevance`. Aldrig fulltext. Celler som börjar med `=`, `+`, `-` eller `@`
 får ett inledande `'` så att de inte tolkas som formler i Excel.
 
+## Adminverktyg: visa som en annan användare
+
+Ett läs-bart verktyg (specens avsnitt 2): välj en användare och se artiklarna hen ser, och varför de kom med
+("Varför: profil (term)"). Inget skrivs. Det kräver två terminaler och att demon har körts (`npm run demo`).
+
+```bash
+# Terminal 1, i rotmappen: servern med Mikael som admin (ADMIN_USER_IDS=u-mikael)
+npm run start:admin
+
+# Terminal 2: gränssnittet på http://localhost:5173
+cd frontend
+npm install
+npm run dev
+```
+
+Vite skickar `/admin` vidare till `127.0.0.1:3000` (proxy i `frontend/vite.config.ts`), så CORS behövs inte. Gränssnittet
+skickar `x-user-id: u-mikael`. Annan admin: `VITE_ADMIN_USER_ID=u-annan npm run dev`, och starta servern med
+`ADMIN_USER_IDS=u-annan npm start`. Utan admin ger servern 403 och gränssnittet visar felet.
+
+Samma sak med curl:
+
+```bash
+curl -H 'x-user-id: u-mikael' http://127.0.0.1:3000/admin/users
+curl -H 'x-user-id: u-mikael' http://127.0.0.1:3000/admin/view-as/u-kalle
+```
+
+`frontend/`: `npm run typecheck` kontrollerar typerna och `npm run build` bygger. Samma varning som ovan gäller:
+identiteten är en platshållare, så starta inte servern på en adress som andra når. Varför verktyget är läs-bart och inte
+hanterar användare: se beslutsloggen (2026-10-10, adminverktyget).
+
+### Poängens uppdelning och frågetestaren
+
+Varje artikel har en rad **Så räknades poängen**: de fyra delarna (påverkan, entitetsvikt, källvikt, färskhet) med värde, vikt
+och poäng, och de faktorer som gav påslag eller avdrag (akut ×1,4, trend ×1,25, uppföljning ×0,6, låg säkerhet ×0,5).
+Uppdelningen sparas när poängen räknas ut (`articles.score_breakdown`) och räknas aldrig om vid läsning. Artiklar som
+sparades före den kolumnen saknar den, så **databasen måste skapas om** efter en uppdatering (`npm run db:down`,
+`db:up`, `migrate`, `demo`).
+
+**Frågetestaren** provar en profilfråga mot arkivet inom den valda användarens omfång. Syntaxfel visas direkt med `^` under
+positionen, annars träffarna med termen som träffade. Den matchar mot samma text som profilmatchningen såg (originaltexten), men matchningen sker på servern, inne i åtkomstmodulen, och texten returneras aldrig: bara rubrik, poäng, termer och `textSource`. Är originaltexten rensad (efter 90 dagar) matchas rubrik och sammanfattning, och svaret säger det (`textSource: "summary"`, `withoutFullText`).
+
+```bash
+curl -H 'x-user-id: u-mikael' -H 'content-type: application/json' \
+  -d '{"userId":"u-kalle","query":"(Rikstak OR Takvårdarna) AND NOT pumpa*"}' \
+  http://127.0.0.1:3000/admin/query-test
+```
+
 ## Vad demon visar
 
 `npm run demo` läser in entitetsregistret och dag 1-råposterna (`raw_items.json` + `raw_items_extra.json`),
@@ -131,7 +178,7 @@ npm run typecheck
 
 ### Testfiler
 
-506 tester i 35 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+551 tester i 38 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -141,6 +188,8 @@ testdatabasen.
 | `raw-text.spec.ts` | Råtext lämnar aldrig systemet: mejl, export och arkitekturregel för `full_text`, samt mejl utan sammanfattning | 4 | ja |
 | `render.spec.ts` | Mejlrendering: escapad text, bara http(s)-länkar i huvudlänk och "Även:" | 12 | nej |
 | `export.spec.ts` | Export: roll i `AuthGuard`, `?userId=` bara för admin, skydd mot CSV-formler | 14 | delvis |
+| `admin.spec.ts` | Adminverktyget: 403 för icke-admin, omfånget gäller (Anna ser aldrig takvård), ingen fulltext, profil, term och poänguppdelning per artikel | 10 | ja |
+| `admin-query.spec.ts` | Frågetestaren: syntaxfel med position, träffar med term, omfånget gäller, ingen fulltext i svaret, rensad text märks, samma träffar som pipelinen (`pf-rena`) | 15 | ja |
 | `app.spec.ts` | Servern över HTTP: 401/403/400, admin, `PORT`, bindning till `127.0.0.1` | 10 | ja |
 | `digest.spec.ts` | Utskick: andra källor inom omfånget, tröskel och sortering före begränsning | 8 | ja |
 | `enrich.spec.ts` | Berikningen: kategori och arbetsyta ur fasta listor, fail closed, relevans, triage i pipelinen, stubben | 26 | delvis |
@@ -148,7 +197,7 @@ testdatabasen.
 | `dedupe.spec.ts` | Dubbletter och idempotens: normaliserad URL som identitet, omkörning, d02 och r09 | 12 | ja |
 | `normalize-url.spec.ts` | `normalizeUrl`: spårningsparametrar, fragment, värdnamn | 5 | nej |
 | `triage.spec.ts` | Triage: ogiltiga svar släpper inte igenom något, poängintervall, omgångar, avgränsning mot injektion | 15 | nej |
-| `score.spec.ts` | Poängformeln: högst viktade entiteten, källvikt, färskhet, ingen NaN | 6 | nej |
+| `score.spec.ts` | Poängformeln och dess uppdelning: högst viktade entiteten, källvikt, färskhet, faktorer, ingen NaN | 12 | nej |
 | `similarity.spec.ts` | Cosinuslikhet och `isSameStory` | 8 | nej |
 | `entity-matcher.spec.ts` | Entitetsmatchning: tomma termer, genitiv, Unicode-gränser, skiftläge | 11 | nej |
 | `entity-import.spec.ts` | Entitetsimport: validering, ihopslagning, mappning, `meta_page_id`, inga vd-namn | 11 | ja |
@@ -199,7 +248,8 @@ inte köra `npm run migrate` för testerna.
 | `src/query/` | Frågespråket: tokenizer, parser, utvärdering |
 | `src/profiles/` | Läser in profiler ur `data/profiles.json`, versionerade |
 | `src/pipeline/pipeline.service.ts`, `profile-match.service.ts`, `run-log.service.ts` | Hela körningen (profiler, berikning, profilmatchning), matchningen i batch och körloggen i `pipeline_runs` |
-| `src/digest/`, `src/admin/` | Utskick och export |
+| `src/digest/`, `src/admin/` | Utskick, export och det läs-bara adminverktyget (`admin.controller.ts`) |
+| `frontend/` | Adminverktygets gränssnitt (React, Vite, Tailwind, shadcn/ui). Eget `package.json` |
 | `migrations/` | Schemat. Den första migrationen är hela datamodellen (krav 2). Utgåvor, leveranser och leveransposter används för utskicksloggen. Övriga tabeller för behörighet och publikationer används inte av koden än. Efter en ändring av den första migrationen måste databasen skapas om (`npm run db:down`, `db:up`, `migrate`) |
 | `scripts/demo.ts` | Demon (databasen `bevakning`) |
 | `scripts/query.ts` | `npm run query`: prövar en fråga mot testdatan |

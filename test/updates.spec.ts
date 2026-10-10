@@ -114,6 +114,9 @@ describe('uppdateringar (d02 uppdaterar r02)', () => {
     expect(medFaktor).toBeLessThan(utanFaktor);
     expect(efter.relevance).toBe(medFaktor);
     expect(efter.is_followup).toBe(true);
+    // Uppdelningen skrivs om vid uppdateringen och visar uppföljningsfaktorn
+    expect(efter.score_breakdown.score).toBe(medFaktor);
+    expect(efter.score_breakdown.factors.map((f: { key: string }) => f.key)).toEqual(['uppföljning']);
   });
 
   it('har artikeln aldrig funnits i ett utskick får den ingen nedräkning, men markeras ändå som uppföljning', async () => {

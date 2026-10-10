@@ -8,5 +8,8 @@
 
 # Förstå kod, granska och rätta AI
 
-1.5 h
+2 h
 
+# Frontend - enkelt admin gränssnitt
+
+1 h

@@ -16,9 +16,9 @@ npm run demo           # kör dag 1 och dag 2 och visar vad varje användare få
 npm test               # hela sviten, mot en egen databas (bevakning_test)
 ```
 
-Annat: `npm start` (servern på 127.0.0.1:3000, se README för exporten), `npm run query -- '<fråga>'` (visar hur en
+Annat: `npm run start:admin` (servern med Mikael som admin, för adminverktyget i `frontend/`, se README), `npm start` (servern på 127.0.0.1:3000, se README för exporten), `npm run query -- '<fråga>'` (visar hur en
 profilfråga tolkas och vad den träffar), `npm run purge` (rensar fulltext äldre än 90 dagar), `npm run typecheck`.
-Har du ändrat i migrationen: kör `npm run db:down` först, eftersom datamodellen ligger i en enda migration.
+Har du ändrat i migrationen (senast: `articles.score_breakdown`): kör `npm run db:down` först, eftersom datamodellen ligger i en enda migration.
 
 ## Hur kedjan hänger ihop
 
@@ -34,6 +34,7 @@ råposter → inläsning → dubblettkontroll → triage → berikning → poän
 | `src/query/` | Frågespråket: tokenizer, parser och utvärdering, utan reguljära uttryck. |
 | `src/llm/` | `LlmProvider`-gränssnittet och stubben. All AI går genom gränssnittet. |
 | `src/digest/` | Urval och rendering av mejlet. Sparar vad som skickats i `editions`, `deliveries` och `delivery_items`. |
+| `src/admin/`, `frontend/` | Export och det läs-bara adminverktyget (visa som annan användare, med "Varför: profil (term)"). Gränssnittet har eget `package.json`. |
 | `migrations/` | Hela datamodellen, inklusive behörighet, i en migration (krav 2). |
 | `test/` | Testerna. `architecture-scan.ts` är detektorn bakom arkitekturtestet. |
 
@@ -56,6 +57,7 @@ Allt med status "rättat" i statustabellen. I korthet:
 - Frågespråket, och profilmatchning i batch efter berikningen (krav 3). Mejlet visar varför en artikel kom med.
 - Utskick per mottagare. Det som redan skickats skickas inte igen.
 - Export som CSV, med skydd mot formler i Excel.
+- Adminverktyget "visa som annan användare": läs-bart, med poängens uppdelning per artikel (sparad vid uträkningen, ingen för äldre artiklar) och en frågetestare, bara admin, via åtkomstmodulen och utan fulltext. Gränssnittet är byggt och provat via proxyn men inte klickat igenom i en webbläsare och har inga egna tester.
 - Rensning av fulltext efter 90 dagar.
 
 ## Vad som inte fungerar, kända fel och risker
@@ -68,7 +70,7 @@ Allt med status "rättat" i statustabellen. I korthet:
 | **AI:n kan välja fel men giltig arbetsyta** | Valideringen stoppar ogiltiga svar, inte felaktiga. En modell som luras av injektionstext kan skicka en nyhet till fel arbetsyta. | Fel 4b |
 | **Klustring saknas** | Samma story från flera källor (r01/r02, r16/r17) skickas som separata nyheter. Tröskeln för samma story är inte kalibrerad, och märkt data saknas. | Fel 29, 30 |
 | **`ArticleAccessService` har blivit stor** | Cirka 300 rader: artiklar, utskicksloggen, trendräkning och profilträffar. Fungerar och är testad, men är svår att överblicka. | `src/access/` |
-| **Frågetestaren saknas** | Profiler matchas bara mot nya artiklar, inte mot arkivet. En ny profil kan därför inte provas mot gammal data. | Beslutsloggen |
+| **Profiler matchas bara mot nya artiklar** | Frågetestaren (admin) provar en fråga mot arkivet med samma text som pipelinen (originaltexten, inne i åtkomstmodulen), men artiklar äldre än 90 dagar har rensad text och provas bara på rubrik och sammanfattning. En ny profil matchas inte mot gamla artiklar i `profile_matches`. Prestandakravet (under 2 sekunder mot 30 dagar) är inte mätt: upp till 5000 artiklar med text läses in och utvärderas i minnet. `matchArchive` är det enda undantaget från att originaltexten aldrig läses ut ur åtkomstmodulen, och det bevakas av `test/raw-text.spec.ts`. | Beslutsloggen |
 | **Delar av datamodellen används inte** | `memberships`, `visibility_exceptions`, `sections` och `subscriptions` finns men används inte. Omfånget styrs av `content_scopes`, profilerna läses in från `data/profiles.json` vid varje körning och synligheten per profil tillämpas inte. En förvald publikation används. | Datamodellen |
 | **Inga riktiga mejl** | Utskicket sparas och renderas till `out/`, men skickas inte. Plaintextversion, dark mode och avregistreringslänk saknas. | `src/digest/` |
 | **Prestandakraven är inte mätta** | Inget av kraven i specens avsnitt 10 (till exempel arkivsök under 800 ms) är mätt. | – |
@@ -97,8 +99,8 @@ Schemaläggning av pipelinen och av rensningen. Adaptrarna behöver bara leverer
 *Varför här:* det är den största delen, och den är meningslös innan steg 1 och 2 gör resultatet säkert och bra.
 
 **4. Verktyg för redaktörer och admin.**
-Frågetestaren mot arkivet (under 2 sekunder mot 30 dagar), redaktionell arbetsyta för att godkänna en utgåva,
-"visa som annan användare", arkiv och sök, larmmotor och feedback.
+Mät frågetestaren mot kravet (under 2 sekunder mot 30 dagar), redaktionell arbetsyta för att godkänna en utgåva,
+skrivande adminfunktioner (användare och behörighet, först efter riktig inloggning och med revisionslogg), arkiv och sök, larmmotor och feedback.
 *Varför sist:* verktygen bygger på att allt ovan fungerar.
 
 Löpande: mät prestandakraven och målen i specen (inga missade regeländringar, under 20 procent falska träffar i

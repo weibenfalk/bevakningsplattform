@@ -1,4 +1,4 @@
-import { relevance } from '../src/pipeline/score';
+import { relevance, scoreBreakdown } from '../src/pipeline/score';
 import { ScoredArticle } from '../src/types';
 
 const NOW = new Date('2026-10-01T07:00:00+02:00');
@@ -43,5 +43,40 @@ describe('relevance (poängformeln)', () => {
     it('faktorerna multipliceras: uppföljning och låg säkerhet ger 0,60 × 0,50', () => {
       expect(relevance(article({ isFollowUp: true, confidence: 0.4 }), NOW)).toBe(Math.round(45 * 0.6 * 0.5));
     });
+  });
+});
+
+describe('scoreBreakdown (uppdelningen bakom poängen)', () => {
+  const critical = { id: 'b', watchLevel: 'critical' as const };
+
+  it('delarna har specens vikter, och poängen är summan (före faktorer) avrundad', () => {
+    const b = scoreBreakdown(article({ impact: 60, entities: [critical], sourceWeight: 1.2 }), NOW);
+    expect(b.components.map((c) => [c.key, c.input, c.weight, c.points])).toEqual([
+      ['impact', 60, 0.4, 24],
+      ['entity', 100, 0.25, 25],
+      ['source', 60, 0.2, 12],
+      ['freshness', 100, 0.15, 15],
+    ]);
+    expect(b.base).toBe(76);
+    expect(b.factors).toEqual([]);
+    expect(b.score).toBe(76);
+  });
+
+  it.each([
+    ['akut', { urgency: 'akut' as const }, 1.4],
+    ['trend', { isTrending: true }, 1.25],
+    ['uppföljning', { isFollowUp: true }, 0.6],
+    ['låg säkerhet', { confidence: 0.4 }, 0.5],
+  ])('faktorn %s listas med sin multiplikator', (key, extra, multiplier) => {
+    const b = scoreBreakdown(article(extra), NOW);
+    expect(b.factors.map((f) => [f.key, f.multiplier])).toEqual([[key, multiplier]]);
+    expect(b.score).toBe(Math.round(b.base * multiplier));
+  });
+
+  it('flera faktorer multipliceras, och poängen är densamma som relevance()', () => {
+    const a = article({ urgency: 'akut', isTrending: true, confidence: 0.3, entities: [critical] });
+    const b = scoreBreakdown(a, NOW);
+    expect(b.factors.map((f) => f.key)).toEqual(['akut', 'trend', 'låg säkerhet']);
+    expect(b.score).toBe(relevance(a, NOW));
   });
 });

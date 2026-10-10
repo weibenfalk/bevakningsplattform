@@ -9,7 +9,7 @@ import { extractJson } from '../llm/extract-json';
 import { LLM, LlmProvider } from '../llm/llm.provider';
 import { Entity, RawItem, SPACES, WatchLevel } from '../types';
 import { matchEntities } from './entity-matcher';
-import { relevance } from './score';
+import { ScoreBreakdown, scoreBreakdown } from './score';
 import { contentHash, SkippedItem, Update, splitFresh } from './dedupe';
 import { isCorrection } from './correction';
 import { prepareItem } from './ingest';
@@ -91,7 +91,7 @@ export class EnrichService {
 
       const stored: StoredArticle[] = [];
       for (const item of candidates) {
-        const { data, entityMatches, score, reviewReason } = await this.analyse(item, entities, now, problems.get(item) ?? [], false);
+        const { data, entityMatches, score, breakdown, reviewReason } = await this.analyse(item, entities, now, problems.get(item) ?? [], false);
 
         const inserted: { id: number }[] = await this.knex('articles')
           .insert({
@@ -114,6 +114,7 @@ export class EnrichService {
             impact: data.impact,
             confidence: data.confidence,
             relevance: score,
+            score_breakdown: breakdown ? JSON.stringify(breakdown) : null,
             is_correction: isCorrection(item),
             published_at: item.published_at || null,
             // Pipelinens klocka och inte databasens, så att rensningen efter 90 dagar räknar likadant för artiklar och råposter.
@@ -179,8 +180,8 @@ export class EnrichService {
       ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
       : [];
     const isTrending = await this.trends.isTrending(entityMatches, item.published_at || null, now, item.source, articleId);
-    const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems, isFollowUp, isTrending);
-    return { data, entityMatches, score, reviewReason };
+    const { score, breakdown, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems, isFollowUp, isTrending);
+    return { data, entityMatches, score, breakdown, reviewReason };
   }
 
   /**
@@ -194,7 +195,7 @@ export class EnrichService {
   private async applyUpdate(update: Update, entities: Entity[], now: Date, problems: string[]): Promise<StoredArticle | null> {
     const item = update.entry.prepared;
     const wasSent = (await this.access.sentToAnyone([update.articleId])).has(update.articleId);
-    const { data, entityMatches, score, reviewReason } = await this.analyse(item, entities, now, problems, wasSent, update.articleId);
+    const { data, entityMatches, score, breakdown, reviewReason } = await this.analyse(item, entities, now, problems, wasSent, update.articleId);
     if (reviewReason !== null || data.summary === null) return null;
 
     await this.knex('articles')
@@ -213,6 +214,7 @@ export class EnrichService {
         impact: data.impact,
         confidence: data.confidence,
         relevance: score,
+        score_breakdown: breakdown ? JSON.stringify(breakdown) : null,
         is_correction: isCorrection(item),
         is_followup: true,
         updated_at: item.updated_at || item.published_at || null,
@@ -246,15 +248,15 @@ export class EnrichService {
     problems: string[],
     isFollowUp: boolean,
     isTrending: boolean,
-  ): { score: number | null; reviewReason: string | null } {
-    if (!valid) return { score: null, reviewReason: 'Ogiltigt AI-svar (arbetsyta eller annat fält)' };
+  ): { score: number | null; breakdown: ScoreBreakdown | null; reviewReason: string | null } {
+    if (!valid) return { score: null, breakdown: null, reviewReason: 'Ogiltigt AI-svar (arbetsyta eller annat fält)' };
 
-    if (problems.length) return { score: null, reviewReason: problems[0] };
+    if (problems.length) return { score: null, breakdown: null, reviewReason: problems[0] };
 
     const sourceWeight = this.sourceWeights.get(item.source);
-    if (sourceWeight === undefined) return { score: null, reviewReason: `Okänd källa: ${item.source}` };
+    if (sourceWeight === undefined) return { score: null, breakdown: null, reviewReason: `Okänd källa: ${item.source}` };
 
-    const score = relevance(
+    const breakdown = scoreBreakdown(
       {
         impact: data.impact,
         confidence: data.confidence,
@@ -268,9 +270,9 @@ export class EnrichService {
       },
       now,
     );
-    return Number.isFinite(score)
-      ? { score, reviewReason: null }
-      : { score: null, reviewReason: 'Poängen gick inte att räkna ut (till exempel ogiltigt datum)' };
+    return Number.isFinite(breakdown.score)
+      ? { score: breakdown.score, breakdown, reviewReason: null }
+      : { score: null, breakdown: null, reviewReason: 'Poängen gick inte att räkna ut (till exempel ogiltigt datum)' };
   }
 
   private async loadEntities(): Promise<Entity[]> {

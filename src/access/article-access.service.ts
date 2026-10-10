@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX } from '../db/knex.provider';
+import { ScoreBreakdown } from '../pipeline/score';
 import { SPACES } from '../types';
 import { ContentScope, ContentScopeService } from './content-scope.service';
 
@@ -42,6 +43,8 @@ export interface ArticleRow {
   impact: number | null;
   confidence: number | null;
   relevance: number | null;
+  /** Uppdelningen av poängen, sparad när poängen räknades ut. `null` för artiklar utan poäng. Ingen text. */
+  score_breakdown: ScoreBreakdown | null;
   cluster_id: string | null;
   entity_ids: string[];
   categories: string[];
@@ -59,7 +62,7 @@ export interface ArticleRow {
  */
 const PUBLIC_COLUMNS = [
   'id', 'raw_id', 'url', 'source_name', 'title', 'summary', 'spaces', 'urgency',
-  'impact', 'confidence', 'relevance', 'cluster_id', 'entity_ids', 'categories', 'published_at',
+  'impact', 'confidence', 'relevance', 'score_breakdown', 'cluster_id', 'entity_ids', 'categories', 'published_at',
   'is_followup', 'is_correction', 'updated_at',
 ] as const;
 
@@ -74,6 +77,20 @@ function parseSort(sort: string | undefined): { column: string; order: 'asc' | '
     throw new BadRequestException(`Ogiltig sortering. Tillåtna kolumner: ${[...SORTABLE_COLUMNS].join(', ')}`);
   }
   return { column, order };
+}
+
+/** Texten som en fråga provas mot i `matchArchive`. Lämnar aldrig metoden. */
+export interface ArchiveText {
+  title: string;
+  /** Originaltexten, eller sammanfattningen när originaltexten är rensad. */
+  body: string;
+}
+
+export interface ArchiveMatch {
+  row: ArticleRow;
+  terms: string[];
+  /** Vilken text som matchades: originaltexten, eller sammanfattningen när originaltexten är rensad (efter 90 dagar). */
+  textSource: 'fulltext' | 'summary';
 }
 
 /** Den enda vägen in till artiklar. All läsning ska gå härigenom. */
@@ -132,6 +149,37 @@ export class ArticleAccessService {
       .select(PUBLIC_COLUMNS as unknown as string[])
       .orderBy([{ column, order }, { column: 'id', order: 'asc' }])
       .limit(opts.limit ?? 100) as unknown as Promise<ArticleRow[]>;
+  }
+
+  /**
+   * Frågetestaren: provar en fråga mot artiklarna i användarens omfång, med samma text som profilmatchningen såg
+   * (rubrik och originaltext), eller rubrik och sammanfattning när originaltexten är rensad.
+   *
+   * Det här är den enda metod som läser originaltexten (uttalat undantag i `test/raw-text.spec.ts`: specen tillåter
+   * originaltexten för bearbetning i 90 dagar, men förbjuder att den visas eller skickas ut). Texten ges bara till
+   * `match`, som svarar med de termer som träffade (eller `null`), och den ingår aldrig i det som returneras.
+   * Omfånget är detsamma som för all annan läsning.
+   */
+  async matchArchive(
+    userId: string,
+    match: (text: ArchiveText, row: ArticleRow) => string[] | null,
+    limit = 5000,
+  ): Promise<{ hits: ArchiveMatch[]; searched: number; withoutFullText: number }> {
+    const scope = await this.scopes.get(userId);
+    const rows: (ArticleRow & { full_text: string | null })[] = await this.scoped(scope)
+      .select([...PUBLIC_COLUMNS, 'full_text'] as unknown as string[])
+      .orderBy([{ column: 'relevance', order: 'desc' }, { column: 'id', order: 'asc' }])
+      .limit(limit);
+
+    const hits: ArchiveMatch[] = [];
+    let withoutFullText = 0;
+    for (const { full_text: fullText, ...row } of rows) {
+      const purged = !fullText;
+      if (purged) withoutFullText++;
+      const terms = match({ title: row.title, body: purged ? (row.summary ?? '') : fullText }, row);
+      if (terms) hits.push({ row, terms, textSource: purged ? 'summary' : 'fulltext' });
+    }
+    return { hits, searched: rows.length, withoutFullText };
   }
 
   /**

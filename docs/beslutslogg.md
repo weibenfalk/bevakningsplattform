@@ -600,6 +600,80 @@ Ett skrivande steg har inget användaromfång att lägga på, och det lämnar in
 
 **Bevis:** `test/trend.spec.ts` skrevs först. Första körningen: 3 av 4 nya fall röda av rätt skäl (forum, Facebook och blogg räknades, poängen blev 99 i stället för 79), fallet med tre starka källor var redan grönt. Efter ändringen är alla 517 tester gröna. Ett äldre trendtest behövde `source_name` i sina testrader (de saknade källa). Demon visar nu att Rikstaks trend bygger på r13, r04 och d04, och att r05 och r19 inte räknas.
 
+## 2026-10-10: Adminverktyget är läs-bart: visa som annan användare, ingen användarhantering
+
+**Krav.** Specens avsnitt 2: en admin ska kunna visa systemet som en annan användare och se varför en artikel kom med (profil, term, poäng).
+
+**Beslut:**
+- Bara läsning: `GET /admin/users` och `GET /admin/view-as/:userId` (`src/admin/admin.controller.ts`), med ett litet gränssnitt i `frontend/`. Inget i verktyget skriver till databasen.
+- Skyddet är `AuthGuard` följt av en ny `AdminGuard`: admin är de som står i `ADMIN_USER_IDS`, som exporten. Även den egna vyn kräver admin.
+- Artiklarna går genom `ArticleAccessService.forUser` med den visade användarens omfång, så arbetsytan, nekade listor och högsta brådska gäller som för användaren själv. Profilträffarna kommer från `profileMatchesForUser` (användarens egna profiler, senaste versionen, inom omfånget). Svaret har en uttrycklig fältlista (inte `...a`) och ingen `full_text`.
+- Namn och titel läses ur `data/users.json` (`src/config/users.ts`), eftersom `users` bara fylls med platshållare (`name = id`) och dess `role` är en behörighetsroll, inte en titel. Vilka användare som finns och deras arbetsytor kommer från `content_scopes`, som styr omfånget. En användare utan namn i filen visas med sitt id.
+- Frontenden anropar via Vites proxy (ingen CORS) och skickar `x-user-id: u-mikael` (kan ändras med `VITE_ADMIN_USER_ID`). `npm run start:admin` startar servern med `ADMIN_USER_IDS=u-mikael`.
+
+**Varför inte ett verktyg för att skapa och ändra användare:** inloggningen är en platshållare (fel 18). `AuthGuard` litar på `x-user-id`, så vem som helst som når servern kan utge sig för en admin. Ett verktyg som skriver till behörigheten (`content_scopes`, `memberships`) skulle låta den personen ge sig själv eller andra åtkomst till vad som helst, alltså en ny säkerhetsrisk ovanpå en känd. Ett läs-bart verktyg kan som mest visa innehåll som exporten redan visar för samma person. Skrivande verktyg hör hemma efter riktig inloggning, med revisionslogg.
+
+**Alternativ:** (a) Läsa namn ur `users` och fylla den vid inläsning. Kräver att `users.role` blir en titel eller en ny kolumn, alltså en ändring av migrationen, för ett verktyg som bara läser. (b) Ett fält `?userId=` på en befintlig väg. Då blandas adminvyn med användarens egen, och en ny väg är lättare att skydda och testa. (c) Ett eget omfång för admin som ser allt. Då visar verktyget inte vad användaren ser, vilket är hela poängen.
+
+**Känd begränsning:** `forUser` ger högst 200 artiklar (högst poäng först). Profilen visas med sitt id, eftersom profilnamn inte lagras. Gränssnittet är provat med bygge och anrop via proxyn men inte klickat igenom i en webbläsare. `frontend/` har ingen testsvit, och de tre shadcn-komponenterna (`select`, `badge`, `card`) är skrivna för hand i shadcns stil, inte genererade med CLI:t.
+
+**Bevis:** `test/admin.spec.ts` skrevs först. Första körningen: 9 av 10 röda (vägarna fanns inte, 404), och jag skärpte två test som var gröna av fel skäl (de passerade på 404:an). Efter ändringen är alla 527 tester gröna, `test/architecture.spec.ts` också, och `npm run typecheck` och `vite build` går igenom. Provat för hand: `npm run demo`, `npm run start:admin` och curl mot Vite: Kalle ser bara takvård, Mikael ser tre arbetsytor, Kalle som anropare får 403, och svaret innehåller ingen `full_text`.
+
+## 2026-10-10: Poängens uppdelning sparas när poängen räknas ut
+
+**Krav.** Admin ska kunna se hur poängen räknades fram: påverkan, entitetsvikt, källvikt och färskhet med vikter, och vilka faktorer som gav påslag eller avdrag.
+
+**Beslut:**
+- `scoreBreakdown` i `score.ts` är nu formeln, och `relevance` är `scoreBreakdown(...).score`. Det finns alltså en enda uträkning, inte en andra kopia för visning som kan glida isär. Existerande poängtester är oförändrade och gröna.
+- Uppdelningen (delar med värde, vikt och poäng, summan före faktorer, bara de faktorer som gällde, och slutpoängen) sparas som `jsonb` i `articles.score_breakdown` på samma ställe som `relevance`: vid insättning och vid uppdatering. Läsning räknar aldrig om. Det spelar roll eftersom indata ändras: trenden beror på andra artiklar, färskheten på klockan och uppföljningen på vad som skickats. En omräkning vid läsning skulle visa en annan poäng än den som användes.
+- Kolumnen är ett nytt fält i den första migrationen (som resten av datamodellen), så databasen måste skapas om: `npm run db:down`, `db:up`, `migrate`.
+- Åtkomstmodulen lämnar ut kolumnen (den är en siffertabell, ingen text) och `/admin/view-as` visar den. Gränssnittet visar den under "Så räknades poängen" på varje artikel.
+
+**Alternativ:** (a) Räkna om vid läsning. Enklare lagring, men visar inte det som faktiskt gällde (se ovan). (b) Ett antal kolumner (`impact_points`, `source_points`, …). Fler kolumner att hålla i takt med formeln, och faktorerna är en lista. (c) En egen tabell. För mycket för en uppgift som alltid läses tillsammans med artikeln.
+
+**Känd begränsning:** artiklar som sparades före ändringen har `score_breakdown = null`, och gränssnittet säger det i stället för att gissa. Ingen backfyllning, eftersom en omräkning skulle ge fel indata (trend och uppföljning kan inte återskapas). Uppdelningen visar bara de faktorer som gällde, inte de som inte gällde.
+
+**Bevis:** testerna skrevs först: `test/score.spec.ts` var rött (funktionen fanns inte), likaså sparandet i `test/enrich.spec.ts` och `test/admin.spec.ts`. Efter ändringen är de gröna. Uppdateringsvägen har ett eget test i `test/updates.spec.ts`.
+
+## 2026-10-10: Frågetestaren provar frågor mot arkivet via åtkomstmodulen
+
+> **Delvis ersatt samma dag** av nästa post: beslutet att bara matcha rubrik och sammanfattning ändrades, eftersom det gav andra träffar än pipelinen. Avvägningen nedan är skälet till ändringen och står kvar som historik.
+
+
+**Krav.** Specens avsnitt 6: en admin skriver en profilfråga och ser syntaxfel med position direkt, annars artiklarna i arkivet som träffas, med termen, inom vald användares omfång. Rubrik och sammanfattning, aldrig `full_text`.
+
+**Beslut:**
+- `POST /admin/query-test` (`{ userId, query }`), bara admin, läs-bart. `QueryTestService` tolkar frågan med `parse` och profilmatchningens fältlista (`PROFILE_FIELDS`), så samma fråga ger samma svar här som i pipelinen, inklusive att fält artiklarna saknar data för ger syntaxfel (fail closed, fel 42).
+- Syntaxfel returneras med status 200 och `{ syntaxError: { message, position } }` i stället för 400. Ett felaktigt uttryck är ett normalt resultat av ett test, inte ett fel i anropet, och gränssnittet kan då rita `^` under rätt tecken som `npm run query`. 400 är kvar för indata som inte är text eller är över 1000 tecken, och 404 för okänd användare.
+- Artiklarna läses med `ArticleAccessService.forUser` (omfånget, flaggade artiklar och nekade listor gäller, högst 5000 artiklar, högst poäng först). Åtkomstmodulen lämnar aldrig ut originaltexten, så den kan varken matchas eller läcka. Brödtexten i matchningen är sammanfattningen. Därför ligger inget nytt läsande i `src/admin` utanför åtkomstmodulen och arkitekturtestet är oförändrat grönt.
+- Termen: `explain` som i pipelinen. En fråga med bara `NOT` har ingen träffande term, då är frågan själv termen.
+
+**Alternativ:** (a) Läsa originaltexten för att få bättre träffar. Förbjudet av kravet, och det vore ett nytt hål. (b) Sök i databasen (`search_vector`). Frågespråket har egna regler (NEAR, prefix, fält) som Postgres inte har, och två olika matchare ger olika svar. (c) Spara träffarna i `profile_matches`. Ett test ska inte skriva.
+
+**Känd begränsning:** träffarna är mot en annan text än pipelinens (som matchar mot brödtexten vid berikning), så en profil kan träffa en artikel i produktionen som frågetestaren inte visar, och tvärtom. Det är en följd av kravet. Prestandakravet (under 2 sekunder mot 30 dagar) är inte mätt: alla artiklar i omfånget läses in och utvärderas i minnet. Ingen semantisk del.
+
+**Avvägning: frågetestaren ger inte samma träffar som demon.** Profilmatchningen i pipelinen körs medan artikeln bearbetas och ser då hela texten. Frågetestaren matchar bara rubrik och sammanfattning, eftersom originaltexten aldrig får läsas ut. I demon träffar därför en fönsterputsprofil r06 (rutavdraget, som "omfattar fönsterputs" inne i brödtexten), r07, r08 (städtipset, "Rena fönster" i texten) och r09, medan frågetestaren troligen bara hittar r07 ("Fönsterputsare till Kalmar") och d06 ("Ny certifiering för fönsterputsare"), där ordet står i rubriken. Det är inget fel utan en följd av beslutet. Stubbens sammanfattning är dessutom alltid samma generiska text, så bara rubrikens ord kan träffa. Med en riktig AI innehåller sammanfattningen de viktiga orden och skillnaden blir mindre, men den försvinner inte. Jag valde säkerheten (ingen väg till originaltexten) framför fullständiga träffar. Verktyget ska därför läsas som "vad syns i det användaren får se", inte som "vad hade profilen träffat i pipelinen". Ett alternativ vore att spara en lista träffande ord per artikel vid berikningen (utan att spara texten), så att arkivprovet matchar pipelinen. Det är ett nästa steg, inte gjort.
+
+**Bevis:** `test/admin-query.spec.ts` skrevs först och var rött (vägen fanns inte). Ett test hade samma fel som i föregående verktyg, det passerade på en 404, och jag skärpte det. Det första försöket döpte också hjälpfunktionen till `test` och skuggade Jests `test.each`. Efter ändringen är alla 546 tester gröna. Provat för hand mot demon: `Rikstak AND (takvård` ger syntaxfel i position 13, och `(Rikstak OR Takvårdarna) AND NOT pumpa*` ger Kalles träffar med termen.
+
+## 2026-10-10: Frågetestaren matchar mot originaltexten inne i åtkomstmodulen (ersätter "bara rubrik och sammanfattning")
+
+**Fel i föregående beslut.** Frågetestaren matchade bara rubrik och sammanfattning och gav därför andra träffar än pipelinen (pf-rena träffade r06 och r08 i pipelinen men inte i testaren, se avvägningen i posten ovan). Ett verktyg som ska visa "vad hade profilen träffat" men ger ett annat svar än profilen är missvisande, och jag hade valt säkerheten framför att läsa specen noga.
+
+**Specen.** Originaltexten får inte visas eller skickas ut (utskick, visning, export), men får lagras för bearbetning i 90 dagar. Frågetestaren är bearbetning (samma matchning som profilmatchningen, mot arkivet) och visar ingen text. Då är det förenligt med specen att matcha mot originaltexten på servern, så länge texten aldrig lämnar servern.
+
+**Beslut:**
+- `ArticleAccessService.matchArchive(userId, match)` är den enda metod som läser originaltexten ur arkivet. Den tillämpar användarens omfång som all annan läsning, ger texten (rubrik och brödtext) bara till `match`-funktionen, som svarar med de termer som träffade eller `null`, och returnerar artikelraden (utan text), termerna och varifrån texten kom. Texten ingår aldrig i det som returneras.
+- Brödtexten är originaltexten, som i pipelinen (sammanfattningen sökes alltså inte när originaltexten finns). Det är därför träffarna blir desamma som pipelinens, termer inräknade.
+- Är originaltexten rensad (efter 90 dagar, fel 35) matchas rubrik och sammanfattning. Svaret säger det på två sätt: varje träff har `textSource` (`fulltext` eller `summary`), och svaret har `searched` och `withoutFullText`, så att admin ser hur många artiklar som provades med den svagare texten. Gränssnittet skriver ut det.
+- Uttalat undantag i arkitekturregeln för råtext (`test/raw-text.spec.ts`, listan `FULLTEXT_READERS` med motivering ur specen): åtkomstmodulen får nämna originaltexten på ett enda ställe, metoden `matchArchive`. Testet läser koden med TypeScript-kompilatorn och fäller bygget om textsträngen står i kolumnlistan eller i någon annan metod (detektorn prövas mot båda). Tidigare var hela åtkomstmodulen undantagen, så undantaget är nu snävare än förut. `forUser`, exporten och mejlet är oförändrade, och `access.spec.ts` visar fortfarande att raderna aldrig har `full_text`. Undantaget är inte gjort genom att skriva om koden så att testet inte ser det.
+
+**Alternativ:** (a) Spara träffande ord per artikel vid berikningen och matcha mot dem. Slipper läsa originaltexten, men kräver ny datamodell och ger ändå inte träffar för en ny fråga mot ord som inte sparats. (b) Matcha mot en kortare utdragen text. Samma problem som före ändringen. (c) Låta frågetestaren köra pipelinens matchning om. Då skrivs `profile_matches`, och ett test ska inte skriva.
+
+**Risk och känd begränsning:** `match`-funktionen får hela texten. Den kan i princip returnera delar av den som "termer". Det hindras av typen (bara `string[]`) och av att den enda anroparen använder termer ur frågan, inte ur texten, men det är kod som måste granskas om fler anropare tillkommer. Åtkomstmodulen läser in upp till 5000 artiklar med text i minnet per anrop. Det räcker för demodatan men är inte mätt mot prestandakravet (under 2 sekunder mot 30 dagar).
+
+**Bevis:** testerna skrevs först. Första körningen: 4 röda av rätt skäl (inget `textSource`, ingen matchning mot originaltexten, pf-rena gav inte samma träffar, och regeln för `matchArchive` saknade metoden). Detektorn hittade först den lokala variabeln `rows` i stället för metoden, vilket var ett fel i testet, som jag rättade. Efter ändringen är alla 551 tester gröna. `test/admin-query.spec.ts` kör pipelinen på dag 1 och visar att frågetestaren för `pf-rena` (ägare Anna) ger exakt samma artiklar och termer som `profile_matches`, inklusive r06 och r08. Provat för hand mot demon: fem träffar för Anna, alla från originaltexten, och inget `full_text` i svaret.
+
 ## AI-logg
 
 - **2026-10-09, AI hjälpte (`otherSources`-läckan):** AI:n läste utskicksmodulen och hittade att `otherSources` frågade `articles` direkt, förbi åtkomstmodulen. Namn och länkar till källor från artiklar utanför omfånget, flaggade för granskning och i nekade kategorier, kunde alltså nå fel mottagare. Arkitekturtestet missade det eftersom det bara söker efter `from articles`. AI:n skrev först tre röda tester och sedan `sourcesByCluster`, som delar omfångsregler med resten av åtkomstmodulen. Jag granskade lösningen och valde den framför att låta utskicket filtrera själv. Läckan hade inte upptäckts av de ärvda testerna.

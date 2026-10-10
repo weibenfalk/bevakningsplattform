@@ -51,6 +51,8 @@ export async function up(knex: Knex): Promise<void> {
       impact        integer,
       confidence    real,
       relevance     integer,
+      -- Hur poängen räknades fram (delar, vikter och faktorer). Sparas när poängen räknas ut och räknas aldrig om vid läsning.
+      score_breakdown jsonb,
       cluster_id    text,
       entity_ids    text[] NOT NULL DEFAULT '{}',
       categories    text[] NOT NULL DEFAULT '{}',

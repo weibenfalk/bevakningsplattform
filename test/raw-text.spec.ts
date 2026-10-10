@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { INestApplicationContext } from '@nestjs/common';
 import { globSync } from 'glob';
+import * as ts from 'typescript';
 import { ExportController } from '../src/admin/export.controller';
 import { DigestService } from '../src/digest/digest.service';
 import { renderDigest } from '../src/digest/render';
@@ -41,11 +42,56 @@ describe('mejlrendering utan sammanfattning', () => {
   });
 });
 
+/**
+ * Uttalat undantag: åtkomstmodulen får läsa originaltexten på ett enda ställe, `matchArchive`, för frågetestaren.
+ * Motivering ur specen: originaltexten får inte visas eller skickas ut (utskick, visning, export), men får användas
+ * för bearbetning i 90 dagar. Frågetestaren provar en profilfråga, alltså samma bearbetning som profilmatchningen,
+ * och skiljer sig bara genom att den körs mot arkivet. Texten lämnar aldrig metoden: anroparen får artikelraden
+ * (utan text) och de termer som träffade.
+ */
+const FULLTEXT_READERS = [
+  { file: 'src/access/article-access.service.ts', method: 'matchArchive' },
+];
+
+/** Var i koden strängen 'full_text' används, som namnet på den metod (eller konstant) den står i. */
+function fulltextUses(file: string, code: string): string[] {
+  const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true);
+  const uses: string[] = [];
+  const visit = (node: ts.Node) => {
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && /full_text|fullText/.test(node.text)) {
+      // Den yttersta metoden, funktionen eller konstanten som strängen står i (inte en lokal variabel inuti den).
+      let owner: ts.Node | undefined;
+      for (let n: ts.Node | undefined = node; n; n = n.parent) {
+        const declares = ts.isMethodDeclaration(n) || ts.isFunctionDeclaration(n) || (ts.isVariableDeclaration(n) && ts.isVariableStatement(n.parent.parent));
+        if (declares) owner = n;
+      }
+      uses.push(owner && 'name' in owner && owner.name ? (owner.name as ts.Identifier).text : '(utanför metod)');
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return uses;
+}
+
 describe('arkitekturregel: råtext', () => {
-  it('bara berikningen skriver full_text, rensningen nollar den, och åtkomstmodulen nämner den bara för att undanta den', () => {
-    const allowed = ['src/pipeline/enrich.service.ts', 'src/pipeline/purge.service.ts', 'src/access/article-access.service.ts'];
+  it('bara berikningen skriver full_text och rensningen nollar den. Åtkomstmodulen har ett uttalat undantag', () => {
+    const allowed = ['src/pipeline/enrich.service.ts', 'src/pipeline/purge.service.ts', ...FULLTEXT_READERS.map((r) => r.file)];
     const offenders = globSync('src/**/*.ts', { ignore: allowed })
       .filter((file) => /full_text|fullText/.test(readFileSync(file, 'utf8')));
     expect(offenders).toEqual([]);
+  });
+
+  it('i åtkomstmodulen läses originaltexten bara i matchArchive, aldrig i kolumnlistan eller någon annan metod', () => {
+    for (const { file, method } of FULLTEXT_READERS) {
+      const uses = fulltextUses(file, readFileSync(file, 'utf8'));
+      expect(uses.length).toBeGreaterThan(0); // undantaget används fortfarande
+      expect(new Set(uses)).toEqual(new Set([method]));
+    }
+  });
+
+  it('detektorn fäller originaltexten i en annan metod och i kolumnlistan', () => {
+    expect(fulltextUses('x.ts', "class A { forUser() { return q.select('full_text'); } }")).toEqual(['forUser']);
+    expect(fulltextUses('x.ts', "const PUBLIC_COLUMNS = ['id', 'full_text'];")).toEqual(['PUBLIC_COLUMNS']);
+    expect(fulltextUses('x.ts', "class A { matchArchive() { q.select('full_text'); } }")).toEqual(['matchArchive']);
   });
 });

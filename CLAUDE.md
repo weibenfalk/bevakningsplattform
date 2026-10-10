@@ -9,14 +9,15 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 ## Status
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
-- `npm test`: 513 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
+- `npm test`: 551 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
 - De 11 kända felen är rättade, liksom flera fel som hittades vid granskningen (se statustabellen överst i `docs/kodgranskning.md`, som också visar vad som återstår). Före-läget med alla 11 som röda tester finns i git-historiken (commit `8cb6c87`, `test/kanda-fel/kanda-fel.spec.ts`).
 - Incidenten, pipelinebuggarna (plan 1 och 2) och dedupe/idempotens är gjorda. Hela datamodellen (krav 2) ligger i den första migrationen, men tabellerna för behörighet, profiler och utskick används inte av koden än (`content_scopes` styr omfånget, med arbetsyta, tillåtna och nekade kategorier, källor och entiteter samt högsta brådska).
 - Frågespråket (plan 3) är byggt i `src/query/` (tokenizer, parser, utvärdering) och inkopplat: `PipelineService` läser in profilerna, berikar och matchar profilerna mot de nya artiklarna (`profile_matches`). Mejlet visar "Varför: …" för användarens egna profiler. Profilerna filtrerar **inte** urvalet (se beslutsloggen).
 - Dag 2 är gjord: `d01` är en dubblett, `d02` uppdaterar `r02` (ny text och poäng, uppföljning, skickas inte igen), `d05` är en rättelse som alltid är med. Utskicken sparas i `editions`, `deliveries` och `delivery_items` (`DigestService.send`).
 - Rensning efter 90 dagar (fel 35) är gjord: `npm run purge` nollar `articles.full_text` och tömmer `skipped_items.payload`, räknat mot den fasta klockan (artiklar och råposter har `created_at` satt av klockan), och loggas i `pipeline_runs`.
 - Trendfaktorn (fel 21 och 26) är inkopplad: minst 3 unika artiklar om samma entitet de senaste 30 dygnen på `published_at` ger ×1,25 (`TrendService`, `test/trend.spec.ts`).
-- Kvar: matchning mot arkivet (frågetestaren), `ÖVERLÄMNING.md` och slutversionen av `TIDSLOGG.md` och beslutsloggen (plan 4). Äkta autentisering saknas (`AuthGuard` är en platshållare).
+- Kvar: `ÖVERLÄMNING.md` och slutversionen av `TIDSLOGG.md` och beslutsloggen (plan 4). Äkta autentisering saknas (`AuthGuard` är en platshållare).
+- Adminverktyget "visa som annan användare" (läs-bart) är gjort: `GET /admin/users` och `/admin/view-as/:userId` (`src/admin/admin.controller.ts`) och ett gränssnitt i `frontend/` (eget `package.json`, se README). `npm run start:admin` startar servern med `ADMIN_USER_IDS=u-mikael`. Verktyget visar också poängens uppdelning (`articles.score_breakdown`, sparas när poängen räknas ut) och har en frågetestare (`POST /admin/query-test`).
 - `npm run demo` (och `-- --trasig-ai`) visar läckorna per användare och skriver mejlförhandsvisningar till `out/`.
 - Hela kodgranskningen finns i `docs/kodgranskning.md`. Läs den innan du ändrar i `src/`.
 
@@ -39,7 +40,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 1. ~~**Incidenten**~~ (klar): `ArticleAccessService` med omfång som alltid gäller, explicita kolumner och vitlistad `sort`. `EnrichService` utan modellstyrd arbetsyta och utan reserv till originaltexten. `render.ts` utan `marked` och med bara http(s)-länkar. `otherSources` via åtkomstmodulen. `?userId=` bara för admin.
    - Arkitekturtestet läser koden med TypeScript-kompilatorn (`test/architecture-scan.ts`) och fångar alla sätt att nå innehållstabellerna utanför `src/access`. Undantag finns bara för skrivning i pipelinen (listan i `test/architecture.spec.ts`, med motivering).
 2. ~~**Pipelinebuggar**~~ (klar, utom det som står som "kvar" i statustabellen): `normalizeUrl`, entitetsmatchning, entitetsimport, similarity och triage.
-3. **Frågespråket** (krav 4 i specifikationen) – **klar och inkopplad** (se beslutsloggen). Kvar: frågetestare mot arkivet och semantisk del. Ursprungligt krav: egen tokenizer och rekursiv parser **utan reguljära uttryck**, med minst
+3. **Frågespråket** (krav 4 i specifikationen) – **klar och inkopplad** (se beslutsloggen). Frågetestaren (admin, mot arkivet via åtkomstmodulen) är gjord. Kvar: semantisk del. Ursprungligt krav: egen tokenizer och rekursiv parser **utan reguljära uttryck**, med minst
    40 tester inklusive syntaxfel (se `data/profiles.json`: `pf-tak-pris` har en oparad parentes och `pf-puts` en
    inledande `*`). Kopplas sedan till `profile_matches` (tabellen finns redan).
 4. **Dokumentation**: `ÖVERLÄMNING.md` (vad fungerar, vad fungerar inte, risker och nästa steg i ordning), `TIDSLOGG.md`

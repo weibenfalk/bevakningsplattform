@@ -24,6 +24,12 @@ export interface ContentScope {
 export class ContentScopeService {
   constructor(@Inject(KNEX) private readonly knex: Knex) {}
 
+  /** Alla användare med omfång, för adminverktyget. */
+  async list(): Promise<{ userId: string; spaces: Space[] }[]> {
+    const rows: { user_id: string; spaces: Space[] }[] = await this.knex('content_scopes').select('user_id', 'spaces').orderBy('user_id');
+    return rows.map((r) => ({ userId: r.user_id, spaces: r.spaces }));
+  }
+
   async get(userId: string): Promise<ContentScope> {
     const row = await this.knex('content_scopes').where({ user_id: userId }).first();
     if (!row) throw new NotFoundException(`Inget innehållsomfång för ${userId}`);
