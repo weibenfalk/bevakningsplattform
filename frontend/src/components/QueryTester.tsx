@@ -1,6 +1,8 @@
+import React from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+// Api
 import { testQuery } from '@/api';
+// Components
 import { ArticleTitle } from '@/components/ArticleTitle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,12 +11,12 @@ import { Textarea } from '@/components/ui/textarea';
 
 /** Frågetestaren: skriv en profilfråga och se syntaxfel med position, eller träffarna inom vald användares omfång. */
 export function QueryTester({ userId, userName, request }: { userId: string | undefined; userName: string | undefined; request?: { query: string; n: number } }) {
-  const [query, setQuery] = useState('');
-  const card = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = React.useState('');
+  const card = React.useRef<HTMLDivElement>(null);
   const test = useMutation({ mutationFn: (q: string) => testQuery(userId!, q) });
 
   // En profils knapp "Testa i frågetestaren": fyll i frågan, kör den och visa resultatet.
-  useEffect(() => {
+  React.useEffect(() => {
     if (!request || !userId) return;
     setQuery(request.query);
     test.mutate(request.query);

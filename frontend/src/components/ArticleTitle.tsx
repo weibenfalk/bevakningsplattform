@@ -1,3 +1,4 @@
+// Lib
 import { safeHref } from '@/lib/url';
 
 /** Rubriken som länk. Saknas rubriken (Google-recensioner, Facebookinlägg) visas "(ingen rubrik)" i grått, följt av källans namn. Bara http(s)-adresser blir länkar. */

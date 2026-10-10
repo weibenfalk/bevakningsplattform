@@ -1,3 +1,4 @@
+// Types
 import type { ScoreBreakdown as Breakdown } from '@/api';
 
 const round = (n: number) => Math.round(n * 10) / 10;
@@ -5,6 +6,7 @@ const round = (n: number) => Math.round(n * 10) / 10;
 /** Hur poängen räknades fram, så som den sparades i pipelinen (inget räknas om här). */
 export function ScoreBreakdown({ breakdown }: { breakdown: Breakdown | null }) {
   if (!breakdown) return <p className="text-sm text-muted-foreground">Ingen uppdelning sparad för den här artikeln.</p>;
+
   return (
     <div className="flex flex-col gap-2 text-sm">
       <table className="w-full">

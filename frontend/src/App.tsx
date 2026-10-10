@@ -1,56 +1,18 @@
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { fetchUsers, fetchViewAs, type Article } from '@/api';
+// Api
+import { fetchUsers, fetchViewAs } from '@/api';
+// Components
+import { ErrorBox } from './components/ErrorBox';
 import { ProfilesSection } from '@/components/ProfilesSection';
 import { QueryTester } from '@/components/QueryTester';
-import { ScoreBreakdown } from '@/components/ScoreBreakdown';
-import { ArticleTitle } from '@/components/ArticleTitle';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-const urgencyVariant = (urgency: string) => (urgency === 'akut' ? 'destructive' : urgency === 'agera' ? 'default' : 'secondary');
-
-/** "Varför: profil (term, term) · profil (term)", eller inget alls när ingen profil träffade. */
-const why = (a: Article) => a.profileMatches.map((m) => `${m.profileId} (${m.terms.join(', ')})`).join(' · ');
-
-function ErrorBox({ error }: { error: Error }) {
-  return (
-    <p role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">
-      Något gick fel: {error.message}
-    </p>
-  );
-}
-
-function ArticleCard({ article }: { article: Article }) {
-  const reason = why(article);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <ArticleTitle title={article.title} url={article.url} source={article.source} />
-        </CardTitle>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Badge variant="outline">Poäng {article.relevance ?? '–'}</Badge>
-          <Badge variant={urgencyVariant(article.urgency)}>{article.urgency}</Badge>
-          {article.spaces.map((s) => <Badge key={s} variant="secondary">{s}</Badge>)}
-          {article.categories.map((c) => <Badge key={c} variant="outline">{c}</Badge>)}
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2 text-sm">
-        {reason && <p className="text-muted-foreground">Varför: {reason}</p>}
-        <details>
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Så räknades poängen</summary>
-          <div className="pt-2"><ScoreBreakdown breakdown={article.scoreBreakdown} /></div>
-        </details>
-      </CardContent>
-    </Card>
-  );
-}
+import { ArticleCard } from './components/ArticleCard';
 
 export default function App() {
-  const [userId, setUserId] = useState<string>();
-  const [testRequest, setTestRequest] = useState<{ query: string; n: number }>();
+  const [userId, setUserId] = React.useState<string>();
+  const [testRequest, setTestRequest] = React.useState<{ query: string; n: number }>();
   const users = useQuery({ queryKey: ['users'], queryFn: fetchUsers });
   const view = useQuery({ queryKey: ['view-as', userId], queryFn: () => fetchViewAs(userId!), enabled: !!userId });
   // Högst poäng först. Artiklar utan poäng sist.
