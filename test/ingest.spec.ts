@@ -94,3 +94,22 @@ describe('pipelinen: teckenkodning och tidszon', () => {
     expect(row.review_reason).toMatch(/datum/i);
   });
 });
+
+describe('prepareItem: updated_at', () => {
+  const base = { id: 'x', source: 's', url: 'https://example.se/x', published_at: '2026-09-30T18:30:00+02:00', title: 't', text: 'x' };
+
+  it('saknas updated_at förblir det okänt', () => {
+    expect(prepareItem(base).item.updated_at).toBeUndefined();
+  });
+
+  it('en tid med zon tolkas som den är, och en tid utan zon som svensk tid', () => {
+    expect(prepareItem({ ...base, updated_at: '2026-10-01T12:00:00+02:00' }).item.updated_at).toBe('2026-10-01T10:00:00.000Z');
+    expect(prepareItem({ ...base, updated_at: '2026-10-01 12:00:00' }).item.updated_at).toBe('2026-10-01T10:00:00.000Z');
+  });
+
+  it('ett ogiltigt updated_at rapporteras som problem och blir inte en tid', () => {
+    const { item, problems } = prepareItem({ ...base, updated_at: 'igår' });
+    expect(item.updated_at).toBeUndefined();
+    expect(problems).toEqual(['Ogiltigt datum i updated_at: "igår"']);
+  });
+});

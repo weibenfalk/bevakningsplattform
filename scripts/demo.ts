@@ -19,9 +19,14 @@ import { LLM, LlmProvider } from '../src/llm/llm.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
 import { PipelineService } from '../src/pipeline/pipeline.service';
 import { RunLogService } from '../src/pipeline/run-log.service';
+import type { PipelineRun } from '../src/pipeline/run-log.service';
 import { RawItem } from '../src/types';
 
 const brokenAi = process.argv.includes('--trasig-ai');
+
+/** Körningarnas klocka (CLAUDE.md): dag 1 = 2026-10-01 07:00, dag 2 = 2026-10-03 07:00. */
+const DAG1 = new Date('2026-10-01T07:00:00+02:00');
+const DAG2 = new Date('2026-10-03T07:00:00+02:00');
 
 /** En AI som svarar med text i stället för JSON. */
 class BrokenAi implements LlmProvider {
@@ -43,10 +48,21 @@ const EXPECTED: Record<string, string[]> = {
 
 const readJson = <T>(file: string): T => JSON.parse(readFileSync(`data/${file}`, 'utf8'));
 
+function printRuns(runs: PipelineRun[]) {
+  console.log('\n   Körningar (tabellen pipeline_runs, krav 7):');
+  console.log(`   ${'steg'.padEnd(14)} ${'status'.padEnd(7)} ${'tid'.padStart(6)} ${'in'.padStart(4)} ${'ut'.padStart(4)} ${'överhoppade'.padStart(12)}  anmärkning`);
+  for (const r of runs) {
+    const ms = r.finishedAt ? `${r.finishedAt.getTime() - r.startedAt.getTime()} ms` : '-';
+    const note = r.error ?? Object.entries(r.details).map(([k, v]) => `${k}=${v}`).join(', ');
+    const n = (v: number | null) => String(v ?? '-');
+    console.log(`   ${r.step.padEnd(14)} ${r.status.padEnd(7)} ${ms.padStart(6)} ${n(r.itemsIn).padStart(4)} ${n(r.itemsOut).padStart(4)} ${n(r.itemsSkipped).padStart(12)}  ${note}`);
+  }
+}
+
 async function main() {
   const knex = db();
   await knex.migrate.latest({ directory: 'migrations', loadExtensions: ['.ts'] });
-  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes, profile_matches, profile_versions, profiles, users, pipeline_runs RESTART IDENTITY CASCADE');
+  await knex.raw('TRUNCATE skipped_items, entity_matches, articles, entities, content_scopes, profile_matches, profile_versions, profiles, users, pipeline_runs, editions, publications RESTART IDENTITY CASCADE');
 
   const users = readJson<{ id: string; name: string; role: string; scopes: string[] }[]>('users.json');
   await knex('content_scopes').insert(users.map((u) => ({ user_id: u.id, spaces: u.scopes })));
@@ -69,7 +85,7 @@ async function main() {
 
   console.log(`\n== 2. Kör pipelinen för dag 1 (${brokenAi ? 'TRASIG AI' : 'AI-stubben'})`);
   const items = [...readJson<RawItem[]>('raw_items.json'), ...readJson<RawItem[]>('raw_items_extra.json')];
-  const pipeline = await app.get(PipelineService).run(items);
+  const pipeline = await app.get(PipelineService).run(items, { now: DAG1 });
   const enrichReport = pipeline.enrich;
   const stored = await knex('articles').count<{ count: string }>('* as count').first();
   console.log(`   ${items.length} råposter in, ${stored?.count} artiklar sparade, ${enrichReport.skipped.length} överhoppade`);
@@ -81,14 +97,7 @@ async function main() {
   for (const p of pipeline.profiles.skipped) console.log(`   hoppade över profilen ${p.id}: ${p.reason}`);
   console.log(`   Profilmatchning: ${pipeline.matching.profilesRun} profiler kördes mot ${pipeline.enrich.stored.length} nya artiklar, ${pipeline.matching.rows} träffar sparade`);
 
-  console.log('\n   Körningar (tabellen pipeline_runs, krav 7):');
-  console.log(`   ${'steg'.padEnd(14)} ${'status'.padEnd(7)} ${'tid'.padStart(6)} ${'in'.padStart(4)} ${'ut'.padStart(4)} ${'överhoppade'.padStart(12)}  anmärkning`);
-  for (const r of await app.get(RunLogService).list()) {
-    const ms = r.finishedAt ? `${r.finishedAt.getTime() - r.startedAt.getTime()} ms` : '-';
-    const note = r.error ?? Object.entries(r.details).map(([k, v]) => `${k}=${v}`).join(', ');
-    const n = (v: number | null) => String(v ?? '-');
-    console.log(`   ${r.step.padEnd(14)} ${r.status.padEnd(7)} ${ms.padStart(6)} ${n(r.itemsIn).padStart(4)} ${n(r.itemsOut).padStart(4)} ${n(r.itemsSkipped).padStart(12)}  ${note}`);
-  }
+  printRuns(await app.get(RunLogService).list());
 
   console.log('\n== 3. Vad varje användare får se (via ArticleAccessService, samma väg som mejl, sök och export)');
   mkdirSync('out', { recursive: true });
@@ -116,7 +125,8 @@ async function main() {
     if (missed.length) console.log(`   Utan profilträff men ändå med i urvalet: ${missed.map((r) => r.raw_id).join(', ')}`);
 
     // Det riktiga utskicket: DigestService med tröskel, sortering på brådska och andra källor.
-    const html = await app.get(DigestService).compose(user.id);
+    // Utskicket skickas och sparas i utskicksloggen, så att dag 2 vet vad användaren redan fått.
+    const { html } = await app.get(DigestService).send(user.id, DAG1);
     const sent = rows
       .filter((r) => (r.relevance ?? 0) >= pipelineConfig.digest.threshold)
       .sort((a, b) => (a.raw_id < b.raw_id ? -1 : 1));
@@ -127,11 +137,71 @@ async function main() {
     console.log(`   Förhandsvisning av mejlet: ${file}`);
   }
 
+  // ---- Dag 2 ----
+  console.log('\n== 4. Dag 2 (raw_items_dag2.json, klockan 2026-10-03 07:00)');
+  const items2 = readJson<RawItem[]>('raw_items_dag2.json');
+  const r02Before = await knex('articles').where('raw_id', 'r02').first();
+  const runsBefore = (await app.get(RunLogService).list()).length;
+  const day2 = await app.get(PipelineService).run(items2, { now: DAG2 });
+  const stored2 = await knex('articles').count<{ count: string }>('* as count').first();
+  console.log(`   ${items2.length} råposter in, ${day2.enrich.stored.length - day2.enrich.updated.length} nya artiklar, ${day2.enrich.updated.length} uppdaterade, ${day2.enrich.skipped.length} överhoppade (${stored2?.count} artiklar totalt)`);
+  for (const s of day2.enrich.skipped) {
+    console.log(`   hoppade över ${s.rawId} (${s.reason})${s.existingRawId ? `, krockar med ${s.existingRawId}` : ''}`);
+  }
+  for (const u of day2.enrich.updated) {
+    const now = await knex('articles').where('id', u.articleId).first();
+    const sentTo = (await knex('delivery_items as di').join('deliveries as d', 'd.id', 'di.delivery_id').where('di.article_id', u.articleId).pluck('d.user_id')) as string[];
+    console.log(`   ${u.rawId} uppdaterade ${u.existingRawId}: ny text, poäng ${r02Before.relevance} -> ${now.relevance}, markerad som uppföljning`);
+    console.log(`     (poängen har faktorn 0,60 eftersom ${u.existingRawId} redan skickats till ${sentTo.map((id) => users.find((x) => x.id === id)?.name ?? id).join(' och ')})`);
+  }
+  console.log(`   Profilmatchning: ${day2.matching.profilesRun} profiler kördes mot ${day2.enrich.stored.length} nya eller uppdaterade artiklar, ${day2.matching.rows} träffar sparade`);
+  printRuns((await app.get(RunLogService).list()).slice(runsBefore));
+
+  console.log('\n   Vad varje användare får dag 2 (rättelser ska alltid med, och det som redan skickats skickas inte igen):');
+  const changedIds = day2.enrich.stored.map((s) => s.id);
+  for (const user of users) {
+    const { html, articleIds } = await app.get(DigestService).send(user.id, DAG2);
+    const visible = await access.visibleAmong(user.id, changedIds);
+    const sentDag1 = await access.sentTo(user.id, changedIds.filter((id) => !articleIds.includes(id)));
+    writeFileSync(`out/${user.id}-dag2.html`, page(`${user.name}, dag 2`, html));
+    console.log(`\n   ${user.name} (${user.role}): utskicket innehåller ${articleIds.length} artiklar`);
+    for (const r of visible) {
+      const tags = [r.is_correction ? 'rättelse' : '', r.is_followup ? 'uppföljning' : ''].filter(Boolean).join(', ');
+      const title = (r.title || '(ingen rubrik)').slice(0, 44).padEnd(44);
+      let verdict: string;
+      if (articleIds.includes(r.id)) verdict = r.is_correction && (r.relevance ?? 0) < pipelineConfig.digest.threshold ? 'SKICKAS (rättelse, alltid med)' : 'SKICKAS';
+      else if (sentDag1.has(r.id)) verdict = 'skickas inte igen (fick den redan dag 1)';
+      else verdict = `skickas inte (relevans ${r.relevance} < ${pipelineConfig.digest.threshold})`;
+      console.log(`     ${r.raw_id}  ${title} ${verdict}${tags ? `  [${tags}]` : ''}`);
+    }
+    const hidden = changedIds.length - visible.length;
+    if (hidden) console.log(`     (${hidden} artiklar från dag 2 ligger utanför ${user.name}s arbetsyta och visas inte)`);
+    console.log(`     Förhandsvisning av mejlet: out/${user.id}-dag2.html`);
+  }
+
+  const editions = await knex('editions as e')
+    .join('deliveries as d', 'd.edition_id', 'e.id')
+    .join('delivery_items as di', 'di.delivery_id', 'd.id')
+    .groupBy('e.id', 'e.sent_at')
+    .orderBy('e.sent_at')
+    .select('e.id', 'e.sent_at')
+    .countDistinct<{ deliveries: string }[]>('d.id as deliveries')
+    .count<{ items: string }[]>('di.article_id as items');
+  console.log('\n   Utskicksloggen (editions, deliveries och delivery_items):');
+  for (const e of editions as unknown as { id: number; sent_at: Date; deliveries: string; items: string }[]) {
+    console.log(`     utgåva ${e.id}, skickad ${e.sent_at.toISOString()}: ${e.deliveries} leveranser, ${e.items} artiklar`);
+  }
+
   if (brokenAi) {
     const r01 = await knex('articles').where('raw_id', 'r01').first();
-    console.log('\n== 4. Sammanfattningen av r01 när AI:n svarade fel:');
-    console.log(`   "${r01.summary}"`);
-    console.log(`   Samma som originaltexten? ${r01.summary === r01.full_text ? 'JA, hela artikeln hamnar i mejlet' : 'nej'}`);
+    console.log('\n== 5. Vad som händer med r01 när AI:n svarade fel:');
+    if (!r01) {
+      console.log('   Ingenting sparades: triage kunde inte bedöma någon post (ogiltigt svar), så ingen släpps igenom (fail closed).');
+      console.log('   Originaltexten hamnar därmed aldrig i mejlet.');
+    } else {
+      console.log(`   "${r01.summary}"`);
+      console.log(`   Samma som originaltexten? ${r01.summary === r01.full_text ? 'JA, hela artikeln hamnar i mejlet' : 'nej'}`);
+    }
   }
 
   console.log(

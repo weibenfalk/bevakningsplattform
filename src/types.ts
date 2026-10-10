@@ -37,4 +37,6 @@ export interface ScoredArticle {
   publishedAt: string;
   entities: { id: string; watchLevel: WatchLevel }[];
   isTrending: boolean;
+  /** Storyn har redan funnits i ett tidigare utskick (specens avsnitt 5: ×0,60). Utelämnat är samma som false. */
+  isFollowUp?: boolean;
 }

@@ -85,5 +85,13 @@ export function prepareItem(item: RawItem): PreparedItem {
   const published = parsePublished(item.published_at);
   if (published === null) problems.push(`Ogiltigt datum: "${item.published_at}"`);
 
-  return { item: { ...item, title: title.text, text: text.text, published_at: published ?? '' }, problems };
+  // updated_at finns bara på poster som källan har uppdaterat. Ett ogiltigt värde är ett problem, inte en gissad tid.
+  let updated: string | undefined;
+  if (item.updated_at !== undefined) {
+    const parsed = parsePublished(item.updated_at);
+    if (parsed === null) problems.push(`Ogiltigt datum i updated_at: "${item.updated_at}"`);
+    else updated = parsed;
+  }
+
+  return { item: { ...item, title: title.text, text: text.text, published_at: published ?? '', updated_at: updated }, problems };
 }

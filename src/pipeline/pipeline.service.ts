@@ -6,6 +6,8 @@ import { MatchReport, ProfileMatchService } from './profile-match.service';
 export interface PipelineOptions {
   /** Filen med profiler. */
   profilesFile?: string;
+  /** Körningens klocka (dag 1 = 2026-10-01 07:00, dag 2 = 2026-10-03 07:00). Standard är pipelinens klocka. */
+  now?: Date;
 }
 
 export interface PipelineReport {
@@ -25,7 +27,7 @@ export class PipelineService {
 
   async run(items: Parameters<EnrichService['run']>[0], options: PipelineOptions = {}): Promise<PipelineReport> {
     const profiles = await this.profiles.loadFromFile(options.profilesFile ?? 'data/profiles.json');
-    const enrich = await this.enrich.run(items);
+    const enrich = await this.enrich.run(items, options.now);
     const matching = await this.matching.run(enrich.stored);
     return { profiles, enrich, matching };
   }

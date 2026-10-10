@@ -98,15 +98,15 @@ describe('Dubbletter och idempotens (krav 7)', () => {
   });
 
   describe('samma URL men nytt innehåll (d02 uppdaterar r02)', () => {
-    it('skriver inte över och tappar inte tyst: loggas som ändrat innehåll', async () => {
+    // Uppdateringar tillämpas nu (se test/updates.spec.ts). Här kontrolleras bara att de inte blir en ny artikel
+    // och att de inte hamnar i loggen över överhoppade poster.
+    it('blir inte en ny artikel och loggas inte som överhoppad, eftersom den tillämpas', async () => {
       await enrich.run([r02], NOW);
-      const before = (await articles())[0];
       const report = await enrich.run([d02], new Date('2026-10-03T07:00:00+02:00'));
-      expect(await articles()).toEqual([before]);
-      expect(report.skipped[0]).toMatchObject({ rawId: 'd02', reason: 'changed_content', existingRawId: 'r02' });
-      const [logged] = await skipped();
-      expect(logged.payload.text).toBe(d02.text);
-      expect(logged.payload.updated_at).toBe(d02.updated_at);
+      expect((await articles()).map((a) => a.raw_id)).toEqual(['r02']);
+      expect(report.skipped).toEqual([]);
+      expect(report.updated).toEqual([expect.objectContaining({ rawId: 'd02', existingRawId: 'r02' })]);
+      expect(await skipped()).toEqual([]);
     });
   });
 

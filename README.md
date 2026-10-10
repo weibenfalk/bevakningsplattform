@@ -85,6 +85,10 @@ hoppas över. De övriga körs mot de nya artiklarna efter berikningen, och trä
 per användare vilka av hens egna profiler som träffade vilka artiklar och med vilken term, och mejlet i `out/` har
 "Varför: profil (term)" under artikeln. Profilerna styr inte urvalet: Kalle får r06 (rotavdraget) även om ingen av hans profiler träffar den.
 
+Demon kör sedan **dag 2** (`raw_items_dag2.json`, klockan 2026-10-03 07:00) och visar vad varje användare får: d01 hoppas över som dubblett, d02 uppdaterar r02
+(ny text och poäng, markerad som uppföljning, och skickas inte igen till dem som fick r02), och d05 (en rättelse) är alltid med.
+Utskicken sparas i `editions`, `deliveries` och `delivery_items`, så det som skickats dag 1 skickas inte om. Förhandsvisningar för dag 2 hamnar i `out/<användare>-dag2.html`.
+
 Demon skriver också ut en sammanfattning av körningarna från tabellen `pipeline_runs` (steg, status, tid, antal in, ut och överhoppade). Varje steg loggar sig själv, så sammanfattningen kommer från databasen och inte från returvärdena.
 
 ## Frågespråket (`npm run query`)
@@ -126,7 +130,7 @@ npm run typecheck
 
 ### Testfiler
 
-413 tester i 30 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+481 tester i 34 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -156,6 +160,10 @@ testdatabasen.
 | `query-profiles.spec.ts` | Profilerna i `data/profiles.json`: de två trasiga ger fel, de giltiga träffar rätt artiklar | 11 | nej |
 | `profile-matching.spec.ts` | Profiler in (versioner, trasiga hoppas över), matchning i pipelinen, idempotens, ägarens omfång, fält som saknar data (fail closed) | 22 | ja |
 | `profile-digest.spec.ts` | "Varför: …" i mejlet: bara egna profiler och senaste version, urvalet oförändrat | 10 | delvis |
+| `updates.spec.ts` | Uppdateringar (d02 uppdaterar r02): ny text och poäng, uppföljning, äldre version, ogiltigt svar | 13 | ja |
+| `delivery.spec.ts` | Utskicksloggen i utgåvor och leveranser (inget skickas igen), uppföljningar och rättelser som alltid är med | 22 | ja |
+| `day2.spec.ts` | Dag 2 med de riktiga posterna: d01, d02, d05 och vad varje användare får | 10 | ja |
+| `correction.spec.ts` | Vad som räknas som rättelse | 12 | nej |
 | `pipeline-runs.spec.ts` | Krav 7: `pipeline_runs` får en rad per körning av inläsning, berikning och profilmatchning (start, slut, antal, fel) | 12 | ja |
 | `query-data.spec.ts` | Datan i `npm run query`: samma filer som demon (inkl. r19–r22) och reparerad teckenkodning | 3 | nej |
 | `query-describe.spec.ts` | Utskriften i `npm run query`: tokens, träd, träffande termer och felmarkering | 11 | nej |
@@ -190,7 +198,7 @@ inte köra `npm run migrate` för testerna.
 | `src/profiles/` | Läser in profiler ur `data/profiles.json`, versionerade |
 | `src/pipeline/pipeline.service.ts`, `profile-match.service.ts`, `run-log.service.ts` | Hela körningen (profiler, berikning, profilmatchning), matchningen i batch och körloggen i `pipeline_runs` |
 | `src/digest/`, `src/admin/` | Utskick och export |
-| `migrations/` | Schemat. Den första migrationen är hela datamodellen (krav 2). Tabellerna för behörighet, profiler och utskick används inte av koden än |
+| `migrations/` | Schemat. Den första migrationen är hela datamodellen (krav 2). Utgåvor, leveranser och leveransposter används för utskicksloggen. Övriga tabeller för behörighet och publikationer används inte av koden än. Efter en ändring av den första migrationen måste databasen skapas om (`npm run db:down`, `db:up`, `migrate`) |
 | `scripts/demo.ts` | Demon (databasen `bevakning`) |
 | `scripts/query.ts` | `npm run query`: prövar en fråga mot testdatan |
 | `test/` | Tester (databasen `bevakning_test`) |

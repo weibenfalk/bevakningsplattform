@@ -1,19 +1,32 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX } from '../db/knex.provider';
+import { SPACES } from '../types';
 import { ContentScope, ContentScopeService } from './content-scope.service';
 
 export interface ArticleQuery {
   q?: string;
   sort?: string;
   limit?: number;
+  /** Bara artiklar som användaren inte redan fått i ett utskick. */
+  unsentOnly?: boolean;
+  /** Bara rättelser. */
+  onlyCorrections?: boolean;
+  /** Lägsta relevans (artiklar utan poäng räknas som 0). */
+  minRelevance?: number;
 }
+
+const DEFAULT_PUBLICATION = 'bevakning';
 
 /** Det dubblettkontrollen behöver veta om en sparad artikel. Ingen text. */
 export interface StoredIdentity {
+  id: number;
   raw_id: string;
   url: string;
   content_hash: string | null;
+  /** Tiden för den version som är sparad, för att avgöra om en post med samma URL är nyare eller äldre. */
+  published_at: Date | null;
+  updated_at: Date | null;
 }
 
 /** En artikelrad så som den lämnar åtkomstmodulen. Ingen fulltext. */
@@ -33,6 +46,11 @@ export interface ArticleRow {
   entity_ids: string[];
   categories: string[];
   published_at: Date | null;
+  /** Uppdaterad av källan efter första publiceringen: det här är en uppföljning. */
+  is_followup: boolean;
+  /** Rättelse: ska alltid med i utskicket. */
+  is_correction: boolean;
+  updated_at: Date | null;
 }
 
 /**
@@ -42,6 +60,7 @@ export interface ArticleRow {
 const PUBLIC_COLUMNS = [
   'id', 'raw_id', 'url', 'source_name', 'title', 'summary', 'spaces', 'urgency',
   'impact', 'confidence', 'relevance', 'cluster_id', 'entity_ids', 'categories', 'published_at',
+  'is_followup', 'is_correction', 'updated_at',
 ] as const;
 
 /** Kolumner som sorteringen får använda. Värdet från anroparen når aldrig SQL som text. */
@@ -91,6 +110,14 @@ export class ArticleAccessService {
       query.andWhereRaw(`search_vector @@ websearch_to_tsquery('swedish', ?)`, [opts.q]);
     }
 
+    if (opts.unsentOnly) {
+      query.whereNotExists(
+        this.delivered().whereRaw('di.article_id = articles.id').where('d.user_id', userId),
+      );
+    }
+    if (opts.onlyCorrections) query.where('is_correction', true);
+    if (opts.minRelevance !== undefined) query.where('relevance', '>=', opts.minRelevance);
+
     return query
       .select(PUBLIC_COLUMNS as unknown as string[])
       .orderBy([{ column, order }, { column: 'id', order: 'asc' }])
@@ -98,15 +125,77 @@ export class ArticleAccessService {
   }
 
   /**
-   * Identiteten (id, URL och innehållshash) hos redan sparade artiklar, för dubblettkontrollen i pipelinen (krav 7).
-   * Medvetet utan användaromfång: dubbletter måste upptäckas oavsett vem som får se artikeln. Därför lämnar den bara
-   * dessa tre kolumner, och den används aldrig för att visa något för en användare.
+   * Identiteten (id, URL, innehållshash och tid) hos redan sparade artiklar, för dubblettkontrollen i pipelinen
+   * (krav 7). Medvetet utan användaromfång: dubbletter och uppdateringar måste upptäckas oavsett vem som får se
+   * artikeln. Därför lämnar den ingen text, och den används aldrig för att visa något för en användare.
    */
   async storedIdentities(urls: string[], rawIds: string[]): Promise<StoredIdentity[]> {
     return this.knex('articles')
       .whereIn('url', urls)
       .orWhereIn('raw_id', rawIds)
-      .select('raw_id', 'url', 'content_hash');
+      .select('id', 'raw_id', 'url', 'content_hash', 'published_at', 'updated_at');
+  }
+
+  /** Skickade leveranser: leveransposter som hör till en leverans som har skickats (`sent_at`). Ett utkast räknas inte. */
+  private delivered(): Knex.QueryBuilder {
+    return this.knex('delivery_items as di').join('deliveries as d', 'd.id', 'di.delivery_id').whereNotNull('d.sent_at');
+  }
+
+  /**
+   * Utskicksloggen: spara att artiklarna skickats till användaren, i utgåvan för den här sändningstiden
+   * (`editions`), som en leverans till användaren (`deliveries`) med artiklarna som poster (`delivery_items`).
+   * Mottagare i samma utskick delar utgåva. Säkert att köra om med samma sändningstid: inget dubbleras.
+   * Loggen är det som hindrar att samma artikel skickas igen, och det som visar att en story redan funnits i ett utskick.
+   *
+   * Publikationer byggs inte än. Tills dess används en förvald publikation, och en användare som saknas i `users`
+   * läggs till med lägsta rollen (platshållare tills användare läses in på riktigt).
+   */
+  async recordSent(userId: string, articleIds: number[], sentAt: Date): Promise<void> {
+    if (!articleIds.length) return;
+    await this.knex.transaction(async (trx) => {
+      await trx('users').insert({ id: userId, name: userId, role: 'reader' }).onConflict('id').ignore();
+      await trx('publications')
+        .insert({ id: DEFAULT_PUBLICATION, name: 'Bevakning', spaces: [...SPACES], schedule: 'varannan dag' })
+        .onConflict('id')
+        .ignore();
+
+      const [edition]: { id: number }[] = await trx('editions')
+        .insert({ publication_id: DEFAULT_PUBLICATION, status: 'sent', sent_at: sentAt })
+        .onConflict(['publication_id', 'sent_at'])
+        .merge(['status'])
+        .returning('id');
+      const [delivery]: { id: number }[] = await trx('deliveries')
+        .insert({ edition_id: edition.id, user_id: userId, sent_at: sentAt })
+        .onConflict(['edition_id', 'user_id'])
+        .merge(['sent_at'])
+        .returning('id');
+      await trx('delivery_items')
+        .insert(articleIds.map((article_id) => ({ delivery_id: delivery.id, article_id })))
+        .onConflict(['delivery_id', 'article_id'])
+        .ignore();
+    });
+  }
+
+  /** Vilka av artiklarna användaren redan fått i ett utskick. */
+  async sentTo(userId: string, articleIds: number[]): Promise<Set<number>> {
+    if (!articleIds.length) return new Set();
+    const rows: { article_id: number }[] = await this.delivered()
+      .where('d.user_id', userId)
+      .whereIn('di.article_id', articleIds)
+      .distinct('di.article_id as article_id');
+    return new Set(rows.map((r) => r.article_id));
+  }
+
+  /**
+   * Vilka av artiklarna som skickats till någon, för uppföljningsfaktorn. Medvetet utan användaromfång, och bara ett ja
+   * eller nej per artikel: ingen får veta vem som fått vad.
+   */
+  async sentToAnyone(articleIds: number[]): Promise<Set<number>> {
+    if (!articleIds.length) return new Set();
+    const rows: { article_id: number }[] = await this.delivered()
+      .whereIn('di.article_id', articleIds)
+      .distinct('di.article_id as article_id');
+    return new Set(rows.map((r) => r.article_id));
   }
 
   /**

@@ -24,6 +24,7 @@ export function relevance(a: ScoredArticle, now: Date): number {
 
   if (a.urgency === 'akut') r *= 1.4;
   if (a.isTrending) r *= 1.25;
+  if (a.isFollowUp) r *= 0.6;
   if (a.confidence < 0.5) r *= 0.5;
 
   return Math.round(r);

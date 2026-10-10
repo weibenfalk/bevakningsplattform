@@ -31,4 +31,20 @@ describe('relevance (poängformeln)', () => {
     const later = new Date('2026-10-31T07:00:00+02:00');
     expect(relevance(article(), NOW)).toBeGreaterThan(relevance(article(), later));
   });
+
+  describe('uppföljning (×0,60 om storyn redan funnits i ett tidigare utskick)', () => {
+    // 0,40 × 50 + 0,20 × 1 × 50 + 0,15 × 100 = 45
+    it('en uppföljning får 60 procent av poängen', () => {
+      expect(relevance(article(), NOW)).toBe(45);
+      expect(relevance(article({ isFollowUp: true }), NOW)).toBe(27);
+    });
+
+    it('ingen uppföljning ger samma poäng som förut, och false är samma som utelämnat', () => {
+      expect(relevance(article({ isFollowUp: false }), NOW)).toBe(relevance(article(), NOW));
+    });
+
+    it('faktorerna multipliceras: uppföljning och låg säkerhet ger 0,60 × 0,50', () => {
+      expect(relevance(article({ isFollowUp: true, confidence: 0.4 }), NOW)).toBe(Math.round(45 * 0.6 * 0.5));
+    });
+  });
 });

@@ -43,7 +43,7 @@ describe('pipeline_runs: alla steg loggar sina körningar (krav 7)', () => {
     await app.get(PipelineService).run(dag1());
     const ingest = (await runs()).find((r) => r.step === 'ingest')!;
     expect(ingest).toMatchObject({ itemsIn: 23, itemsOut: 21, itemsSkipped: 2 });
-    expect(ingest.details).toMatchObject({ alreadyStored: 0 });
+    expect(ingest.details).toMatchObject({ alreadyStored: 0, updates: 0 });
   });
 
   it('berikningen räknar in (nya poster), ut (sparade artiklar) och överhoppade (sållade bort)', async () => {

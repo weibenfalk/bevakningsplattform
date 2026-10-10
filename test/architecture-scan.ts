@@ -17,10 +17,10 @@ import * as ts from 'typescript';
 /**
  * Tabeller med innehåll, eller som visar vilket innehåll som finns. Läsning ska gå via åtkomstmodulen (src/access),
  * som lägger på användarens omfång. `skipped_items` innehåller hela råposter (alltså råtext).
- * `entity_matches` och `profile_matches` pekar ut artiklar, och utgåvor, utskick och omdömen innehåller eller
+ * `entity_matches`, `profile_matches` och `delivery_items` pekar ut artiklar, och utgåvor, utskick och omdömen innehåller eller
  * pekar på dem. Register och inställningar (entities, profiles, users, ...) är inte innehåll.
  */
-export const CONTENT_TABLES = ['articles', 'profile_matches', 'entity_matches', 'skipped_items', 'editions', 'deliveries', 'feedback'];
+export const CONTENT_TABLES = ['articles', 'profile_matches', 'entity_matches', 'skipped_items', 'editions', 'deliveries', 'feedback', 'delivery_items'];
 
 /** Namn som en knex-instans eller transaktion har i koden. */
 const KNEX_NAMES = ['knex', 'trx', 'tx', 'db'];

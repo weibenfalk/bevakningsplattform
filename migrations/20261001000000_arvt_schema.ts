@@ -52,6 +52,12 @@ export async function up(knex: Knex): Promise<void> {
       needs_review  boolean NOT NULL DEFAULT false,
       review_reason text,
       published_at  timestamptz,
+      -- Tidpunkten för den version som gäller nu, om källan har uppdaterat artikeln (d02 uppdaterar r02).
+      updated_at    timestamptz,
+      -- Artikeln är en uppdatering av en tidigare version (uppföljning, specens avsnitt 5).
+      is_followup   boolean NOT NULL DEFAULT false,
+      -- Artikeln är en rättelse och ska alltid med i utskicket.
+      is_correction boolean NOT NULL DEFAULT false,
       search_vector tsvector GENERATED ALWAYS AS (
         to_tsvector('swedish', coalesce(title, '') || ' ' || coalesce(summary, ''))
       ) STORED
@@ -169,7 +175,9 @@ export async function up(knex: Knex): Promise<void> {
       status          text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'sent')),
       content         jsonb NOT NULL DEFAULT '{}',
       created_at      timestamptz NOT NULL DEFAULT now(),
-      sent_at         timestamptz
+      sent_at         timestamptz,
+      -- Mottagarna i samma utskick delar utgåva: utgåvan identifieras av publikation och sändningstid.
+      UNIQUE (publication_id, sent_at)
     );
 
     -- Ett utskick per utgåva och mottagare, renderat inom mottagarens omfång.
@@ -180,6 +188,18 @@ export async function up(knex: Knex): Promise<void> {
       sent_at     timestamptz,
       UNIQUE (edition_id, user_id)
     );
+    CREATE INDEX deliveries_user_idx ON deliveries (user_id);
+
+    -- Vilka artiklar som ingick i en leverans. Det är utskicksloggen: en artikel som redan skickats till en användare
+    -- skickas inte igen, och en story som redan funnits i ett utskick är en uppföljning (specens avsnitt 5).
+    -- En egen tabell i stället för en jsonb-lista, för att kunna slå upp "har användaren fått artikel X" i SQL,
+    -- med främmande nyckel mot articles och unikhet.
+    CREATE TABLE delivery_items (
+      delivery_id  integer NOT NULL REFERENCES deliveries(id),
+      article_id   integer NOT NULL REFERENCES articles(id),
+      PRIMARY KEY (delivery_id, article_id)
+    );
+    CREATE INDEX delivery_items_article_idx ON delivery_items (article_id);
 
     CREATE TABLE feedback (
       id           serial PRIMARY KEY,
@@ -203,7 +223,7 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex.raw(`DROP TABLE pipeline_runs, feedback, deliveries, editions, subscriptions, sections, visibility_exceptions,
+  await knex.raw(`DROP TABLE pipeline_runs, feedback, delivery_items, deliveries, editions, subscriptions, sections, visibility_exceptions,
     publications, profile_matches, profile_versions, profiles, memberships, users, workspaces,
     skipped_items, entity_matches, articles, entities, content_scopes`);
 }

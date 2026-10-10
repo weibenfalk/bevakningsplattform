@@ -10,7 +10,8 @@ import { LLM, LlmProvider } from '../llm/llm.provider';
 import { Entity, RawItem, SPACES, WatchLevel } from '../types';
 import { matchEntities } from './entity-matcher';
 import { relevance } from './score';
-import { contentHash, SkippedItem, splitFresh } from './dedupe';
+import { contentHash, SkippedItem, Update, splitFresh } from './dedupe';
+import { isCorrection } from './correction';
 import { prepareItem } from './ingest';
 import { normalizeUrl } from './normalize-url';
 import { RunLogService } from './run-log.service';
@@ -28,8 +29,10 @@ export interface EnrichReport {
   skipped: SkippedItem[];
   /** Poster som redan var sparade och kördes om utan ändring. */
   alreadyStored: number;
-  /** Artiklarna som sparades i den här körningen, med texten de berikades med. Profilmatchningen körs mot dem. */
+  /** Artiklarna som sparades eller uppdaterades i den här körningen, med texten de berikades med. Profilmatchningen körs mot dem. */
   stored: StoredArticle[];
+  /** Uppdateringar som tillämpades: en sparad artikel fick ny text och ny poäng (d02 uppdaterar r02). */
+  updated: { rawId: string; existingRawId: string; articleId: number }[];
 }
 
 export interface StoredArticle {
@@ -55,25 +58,30 @@ export class EnrichService {
   async run(items: RawItem[], now: Date = this.clock.now()): Promise<EnrichReport> {
     const entities = await this.loadEntities();
     // Inläsning: reparera teckenkodning, tolka tider och såll bort dubbletter och redan sparade poster före triage
-    // och berikning (idempotens, krav 7). Steget loggas i pipeline_runs.
+    // och berikning (idempotens, krav 7). Nyare versioner av sparade artiklar blir uppdateringar. Steget loggas i pipeline_runs.
     const problems = new Map<RawItem, string[]>();
-    const { fresh, skipped, alreadyStored } = await this.runs.record('ingest', async (run) => {
+    const { fresh, updates, skipped, alreadyStored } = await this.runs.record('ingest', async (run) => {
       run.set({ itemsIn: items.length });
       const entries = items.map((raw) => {
         const p = prepareItem(raw);
         problems.set(p.item, p.problems);
         for (const problem of p.problems) this.log.warn(`${raw.id}: ${problem}`);
-        return { raw, prepared: p.item };
+        return { raw, prepared: p.item, problems: p.problems };
       });
       const result = await splitFresh((urls, rawIds) => this.access.storedIdentities(urls, rawIds), entries);
       await this.recordSkipped(result.skipped);
-      run.set({ itemsOut: result.fresh.length, itemsSkipped: result.skipped.length, alreadyStored: result.alreadyStored });
+      run.set({
+        itemsOut: result.fresh.length + result.updates.length,
+        itemsSkipped: result.skipped.length,
+        alreadyStored: result.alreadyStored,
+        updates: result.updates.length,
+      });
       return result;
     });
 
-    // Berikning: triage och AI-berikning av de nya posterna. Steget loggas i pipeline_runs.
-    const stored = await this.runs.record('enrich', async (run) => {
-      run.set({ itemsIn: fresh.length });
+    // Berikning: triage och AI-berikning av de nya posterna, och ny berikning av uppdateringarna. Steget loggas i pipeline_runs.
+    const { stored, updated, rejected } = await this.runs.record('enrich', async (run) => {
+      run.set({ itemsIn: fresh.length + updates.length });
       const prepared = fresh.map((e) => e.prepared);
       const triaged = await this.triage.filter(prepared);
       const candidates = triaged.kept;
@@ -81,24 +89,7 @@ export class EnrichService {
 
       const stored: StoredArticle[] = [];
       for (const item of candidates) {
-        const raw = await this.llm.complete({
-          task: 'enrich',
-          system: SYSTEM_PROMPT,
-          prompt: `<artikel>\n${item.title}\n\n${item.text}\n</artikel>`,
-        });
-
-        const parsed = EnrichmentSchema.safeParse(extractJson(raw));
-        if (!parsed.success) this.log.warn(`Ogiltigt svar för ${item.id}, sparas flaggad för granskning`);
-
-        const data = parsed.success
-          ? parsed.data
-          // Ogiltigt svar: ingen sammanfattning. Originaltexten får aldrig användas i dess ställe.
-          : { summary: null, business_areas: [] as never[], categories: [] as never[], urgency: 'info' as const, impact: 0, confidence: 0 };
-
-        const entityMatches = parsed.success
-          ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
-          : [];
-        const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems.get(item) ?? []);
+        const { data, entityMatches, score, reviewReason } = await this.analyse(item, entities, now, problems.get(item) ?? [], false);
 
         const inserted: { id: number }[] = await this.knex('articles')
           .insert({
@@ -121,6 +112,7 @@ export class EnrichService {
             impact: data.impact,
             confidence: data.confidence,
             relevance: score,
+            is_correction: isCorrection(item),
             published_at: item.published_at || null,
           })
           // Sista skyddet: databasen har unika url och raw_id. Dubbletter har redan sållats bort ovan.
@@ -133,11 +125,94 @@ export class EnrichService {
           run.set({ itemsOut: stored.length });
         }
       }
-      // Överhoppade här är de som triage sållade bort (eller som databasen avvisade som dubblett).
-      run.set({ itemsOut: stored.length, itemsSkipped: fresh.length - stored.length, triageDropped: triaged.dropped.length, triageUnscored: triaged.unscored.length });
-      return stored;
+
+      // Uppdateringar går inte genom triage: storyn finns redan i systemet, och en uppdatering kostar ett anrop.
+      const updated: EnrichReport['updated'] = [];
+      const rejected: (SkippedItem & { raw: RawItem })[] = [];
+      for (const update of updates) {
+        const applied = await this.applyUpdate(update, entities, now, problems.get(update.entry.prepared) ?? []);
+        if (applied) {
+          stored.push(applied);
+          updated.push({ rawId: update.entry.raw.id, existingRawId: update.existingRawId, articleId: update.articleId });
+          run.set({ itemsOut: stored.length });
+        } else {
+          rejected.push({ raw: update.entry.raw, rawId: update.entry.raw.id, url: normalizeUrl(update.entry.prepared.url), reason: 'invalid_update', existingRawId: update.existingRawId });
+        }
+      }
+      await this.recordSkipped(rejected);
+
+      // Överhoppade här är de som triage sållade bort, uppdateringar som inte gick att ta emot (eller som databasen avvisade som dubblett).
+      const itemsIn = fresh.length + updates.length;
+      run.set({
+        itemsOut: stored.length,
+        itemsSkipped: itemsIn - stored.length,
+        triageDropped: triaged.dropped.length,
+        triageUnscored: triaged.unscored.length,
+        updated: updated.map((u) => `${u.rawId}->${u.existingRawId}`),
+      });
+      return { stored, updated, rejected };
     });
-    return { skipped: skipped.map(({ raw: _raw, ...rest }) => rest), alreadyStored, stored };
+    return { skipped: [...skipped, ...rejected].map(({ raw: _raw, ...rest }) => rest), alreadyStored, stored, updated };
+  }
+
+  /** Låter AI:n berika en post och räknar ut poängen. Gemensamt för nya poster och uppdateringar. */
+  private async analyse(item: RawItem, entities: Entity[], now: Date, problems: string[], isFollowUp: boolean) {
+    const raw = await this.llm.complete({
+      task: 'enrich',
+      system: SYSTEM_PROMPT,
+      prompt: `<artikel>\n${item.title}\n\n${item.text}\n</artikel>`,
+    });
+
+    const parsed = EnrichmentSchema.safeParse(extractJson(raw));
+    if (!parsed.success) this.log.warn(`Ogiltigt svar för ${item.id}, sparas flaggad för granskning`);
+
+    const data = parsed.success
+      ? parsed.data
+      // Ogiltigt svar: ingen sammanfattning. Originaltexten får aldrig användas i dess ställe.
+      : { summary: null, business_areas: [] as never[], categories: [] as never[], urgency: 'info' as const, impact: 0, confidence: 0 };
+
+    const entityMatches = parsed.success
+      ? [...new Set(matchEntities(`${item.title}\n${item.text}`, entities).map((m) => m.entityId))]
+      : [];
+    const { score, reviewReason } = this.score(item, data, entities, entityMatches, now, parsed.success, problems, isFollowUp);
+    return { data, entityMatches, score, reviewReason };
+  }
+
+  /**
+   * Tillämpar en uppdatering: artikelns text, sammanfattning, arbetsyta och poäng byts mot den nya berikningen, och
+   * artikeln markeras som uppföljning. Behåller id, raw_id, URL och källa. Poängen får uppföljningsfaktorn (×0,60)
+   * bara om artikeln redan skickats till någon. Färskheten räknas från uppdateringens tid.
+   *
+   * Går den nya berikningen inte att använda (ogiltigt AI-svar, okänd källa, ogiltigt datum) ändras ingenting.
+   * Då behålls den gamla, fungerande artikeln. Att ersätta den med en flaggad skulle få en synlig nyhet att försvinna.
+   */
+  private async applyUpdate(update: Update, entities: Entity[], now: Date, problems: string[]): Promise<StoredArticle | null> {
+    const item = update.entry.prepared;
+    const wasSent = (await this.access.sentToAnyone([update.articleId])).has(update.articleId);
+    const { data, entityMatches, score, reviewReason } = await this.analyse(item, entities, now, problems, wasSent);
+    if (reviewReason !== null || data.summary === null) return null;
+
+    await this.knex('articles')
+      .where({ id: update.articleId })
+      .update({
+        title: item.title,
+        full_text: item.text,
+        content_hash: contentHash(item),
+        summary: data.summary,
+        spaces: data.business_areas,
+        needs_review: false,
+        review_reason: null,
+        categories: data.categories,
+        entity_ids: entityMatches,
+        urgency: data.urgency,
+        impact: data.impact,
+        confidence: data.confidence,
+        relevance: score,
+        is_correction: isCorrection(item),
+        is_followup: true,
+        updated_at: item.updated_at || item.published_at || null,
+      });
+    return { id: update.articleId, title: item.title, body: item.text };
   }
 
   /** Sparar överhoppade poster med hela råposten, så att inget försvinner tyst. Unik per post, så en omkörning inte dubblerar loggen. */
@@ -152,7 +227,8 @@ export class EnrichService {
   }
 
   /**
-   * Relevans enligt score.ts. Trend- och uppföljningsfaktorerna är inte inkopplade än (känd begränsning).
+   * Relevans enligt score.ts. Uppföljningsfaktorn gäller uppdateringar av artiklar som redan skickats. Trendfaktorn
+   * är inte inkopplad än, och uppföljning av en story från en annan källa kräver klustring (känd begränsning).
    * Det som inte går att poängsätta (okänd källa, ogiltigt datum) ger ingen poäng och flaggas för granskning.
    */
   private score(
@@ -163,6 +239,7 @@ export class EnrichService {
     now: Date,
     valid: boolean,
     problems: string[],
+    isFollowUp: boolean,
   ): { score: number | null; reviewReason: string | null } {
     if (!valid) return { score: null, reviewReason: 'Ogiltigt AI-svar (arbetsyta eller annat fält)' };
 
@@ -177,9 +254,11 @@ export class EnrichService {
         confidence: data.confidence,
         urgency: data.urgency,
         sourceWeight,
-        publishedAt: item.published_at,
+        // Färskheten räknas från den senaste versionen: en uppdatering är nyare än första publiceringen.
+        publishedAt: item.updated_at || item.published_at,
         entities: entities.filter((e) => matchedIds.includes(e.id)).map((e) => ({ id: e.id, watchLevel: e.watchLevel })),
         isTrending: false,
+        isFollowUp,
       },
       now,
     );

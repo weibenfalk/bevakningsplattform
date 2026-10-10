@@ -4,6 +4,8 @@ export interface DigestArticle {
   summary: string | null;
   urgency: string;
   otherSources: { url: string; source_name: string }[];
+  /** En uppdatering av en story som redan funnits i ett utskick. */
+  followUp?: boolean;
   /** Vilka av mottagarens egna profiler som träffade artikeln, och med vilka termer. */
   why?: { profile: string; terms: string[] }[];
 }
@@ -40,7 +42,10 @@ function renderItem(a: DigestArticle): string {
     ? `<a href="${escapeHtml(href)}" style="${LINK}">${escapeHtml(a.title)}</a>`
     : `<span style="${LINK}">${escapeHtml(a.title)}</span>`;
 
+  const label = a.followUp ? `<p style="${TEXT};font-size:12px;font-weight:600;text-transform:uppercase">Uppföljning</p>` : '';
+
   return `<tr><td style="padding:16px 24px">
+    ${label}
     ${title}
     ${a.summary ? `<p style="${TEXT}">${escapeHtml(a.summary)}</p>` : ''}
     ${sources ? `<p style="${TEXT}">Även: ${sources}</p>` : ''}
