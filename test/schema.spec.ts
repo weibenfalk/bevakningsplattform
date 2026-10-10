@@ -24,9 +24,16 @@ describe('schemat (krav 2)', () => {
     await createTestingApp();
   });
 
-  it.each(Object.entries(KRAVDA))('tabellen %s finns med sina kolumner', async (tabell, kolumner) => {
-    const rows = await testKnex()('information_schema.columns').where({ table_schema: 'public', table_name: tabell }).select('column_name');
-    expect(rows.map((r: { column_name: string }) => r.column_name)).toEqual(expect.arrayContaining(kolumner));
+  it('alla tabeller i datamodellen finns med sina kolumner', async () => {
+    const rows = await testKnex()('information_schema.columns')
+      .where({ table_schema: 'public' })
+      .whereIn('table_name', Object.keys(KRAVDA))
+      .select('table_name', 'column_name');
+    const finns: Record<string, string[]> = {};
+    for (const r of rows as { table_name: string; column_name: string }[]) (finns[r.table_name] ??= []).push(r.column_name);
+    const saknas = Object.entries(KRAVDA).flatMap(([tabell, kolumner]) =>
+      kolumner.filter((k) => !(finns[tabell] ?? []).includes(k)).map((k) => `${tabell}.${k}`));
+    expect(saknas).toEqual([]);
   });
 
   it('rollen begränsas till specens sju roller', async () => {

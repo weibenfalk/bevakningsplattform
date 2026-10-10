@@ -21,17 +21,13 @@ const enrichment = (extra: Record<string, unknown>) => ({
 });
 
 describe('Kategori från berikningen', () => {
-  it('godkänner kategorier ur den fasta listan', () => {
-    expect(EnrichmentSchema.safeParse(enrichment({ categories: [CATEGORIES[0]] })).success).toBe(true);
-  });
-
-  it('avvisar en kategori som inte finns i listan', () => {
-    expect(EnrichmentSchema.safeParse(enrichment({ categories: ['påhittad'] })).success).toBe(false);
-  });
-
-  it('avvisar ett svar utan kategori (ingen standardkategori)', () => {
-    expect(EnrichmentSchema.safeParse(enrichment({})).success).toBe(false);
-    expect(EnrichmentSchema.safeParse(enrichment({ categories: [] })).success).toBe(false);
+  it.each([
+    ['godkänner kategorier ur den fasta listan', { categories: [CATEGORIES[0]] }, true],
+    ['avvisar en kategori som inte finns i listan', { categories: ['påhittad'] }, false],
+    ['avvisar ett svar utan kategori (ingen standardkategori)', {}, false],
+    ['avvisar ett svar med tom kategorilista', { categories: [] }, false],
+  ])('%s', (_namn, extra, godkänt) => {
+    expect(EnrichmentSchema.safeParse(enrichment(extra)).success).toBe(godkänt);
   });
 
   describe('lagring', () => {

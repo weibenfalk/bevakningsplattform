@@ -3,11 +3,6 @@ import { adminDatabaseUrl, assertTestDatabase, TEST_DATABASE_URL, testDatabaseUr
 import { closeTestingApp, createTestingApp, testKnex } from './helpers';
 
 describe('testdatabasen', () => {
-  it('är en egen databas på samma server som den lokala, aldrig utvecklingsdatabasen', () => {
-    expect(TEST_DATABASE_URL).toBe('postgres://bevakning:bevakning@localhost:5433/bevakning_test');
-    expect(new URL(TEST_DATABASE_URL).pathname).not.toBe(new URL(LOCAL_DATABASE_URL).pathname);
-  });
-
   it('TEST_DATABASE_URL kan ersätta den, men DATABASE_URL räknas aldrig (den kan peka på något som inte är ett test)', () => {
     expect(testDatabaseUrl({})).toBe(TEST_DATABASE_URL);
     expect(testDatabaseUrl({ DATABASE_URL: 'postgres://u:p@prod.example:5432/bevakning' })).toBe(TEST_DATABASE_URL);

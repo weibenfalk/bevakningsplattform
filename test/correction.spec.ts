@@ -5,12 +5,7 @@ import { RawItem } from '../src/types';
 const lasa = (fil: string): RawItem[] => JSON.parse(readFileSync(`data/${fil}`, 'utf8'));
 
 describe('isCorrection: en rättelse känns igen på rubrik eller textens första ord', () => {
-  it('d05 (rättelsen av rotavdraget) är en rättelse', () => {
-    const d05 = lasa('raw_items_dag2.json').find((i) => i.id === 'd05')!;
-    expect(isCorrection(d05)).toBe(true);
-  });
-
-  it('ingen annan post i testdatan är en rättelse', () => {
+  it('d05 är den enda rättelsen i testdatan', () => {
     const alla = [...lasa('raw_items.json'), ...lasa('raw_items_extra.json'), ...lasa('raw_items_dag2.json')];
     expect(alla.filter(isCorrection).map((i) => i.id)).toEqual(['d05']);
   });

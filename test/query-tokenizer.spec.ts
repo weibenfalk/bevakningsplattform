@@ -122,9 +122,6 @@ describe('tokenize: NEAR/n', () => {
     expect(fel('a NEAR/0 b').message).toMatch(/minst 1/);
   });
 
-  it('text direkt efter siffran (NEAR/3x) är ett fel', () => {
-    expect(fel('a NEAR/3x b').position).toBe(3);
-  });
 });
 
 describe('tokenize: felaktig syntax', () => {
@@ -141,34 +138,21 @@ describe('tokenize: felaktig syntax', () => {
     expect(e.message).toMatch(/wildcard/i);
   });
 
-  it('en ensam stjärna och dubbla stjärnor är fel', () => {
-    expect(fel('*').position).toBe(1);
-    expect(fel('tak**').position).toBe(4);
-  });
-
-  it('wildcard först i ett ord i en fras är fel', () => {
-    expect(fel('"a *b"').position).toBe(4);
-  });
-
   it('ett okänt tecken pekar ut tecknet', () => {
     const e = fel('tak & pris');
     expect(e.position).toBe(5);
     expect(e.message).toContain('&');
   });
 
-  it('ett ord får inte börja med bindestreck (det är inte NOT)', () => {
-    expect(fel('-pumpa').position).toBe(1);
-  });
-
-  it('snedstreck utanför NEAR är ett fel', () => {
-    expect(fel('tak/pris').position).toBe(4);
-  });
-
-  it('typografiska citattecken är ett fel med tydlig position', () => {
-    expect(fel('“tak”').position).toBe(1);
-  });
-
-  it('felmeddelandet innehåller positionen', () => {
-    expect(fel('tak & pris').message).toContain('position 5');
+  it.each([
+    ['ensam stjärna', '*', 1],
+    ['dubbla stjärnor', 'tak**', 4],
+    ['wildcard först i ett ord i en fras', '"a *b"', 4],
+    ['ett ord får inte börja med bindestreck (det är inte NOT)', '-pumpa', 1],
+    ['snedstreck utanför NEAR', 'tak/pris', 4],
+    ['typografiska citattecken', '“tak”', 1],
+    ['text direkt efter siffran (NEAR/3x)', 'a NEAR/3x b', 3],
+  ])('%s är ett fel med tydlig position', (_namn, fråga, position) => {
+    expect(fel(fråga).position).toBe(position);
   });
 });

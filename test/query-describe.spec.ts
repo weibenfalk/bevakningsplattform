@@ -46,21 +46,14 @@ describe('explain: vilka termer gav träffen', () => {
   const art = { title: 'Rikstak köper takfirma', body: 'Rikstak och Takvårdarna' };
   const termer = (q: string) => explain(parse(q), art);
 
-  it('OR ger bara de grenar som träffade', () => {
-    expect(termer('Rikstak OR Sydkust OR Takvårdarna')).toEqual(['Rikstak', 'Takvårdarna']);
-  });
-
-  it('AND ger alla termer', () => {
-    expect(termer('Rikstak AND takfirma')).toEqual(['Rikstak', 'takfirma']);
-  });
-
-  it('NOT bidrar inte med någon term, och en artikel som inte träffar ger ingen term', () => {
-    expect(termer('Rikstak AND NOT Sydkust')).toEqual(['Rikstak']);
-    expect(termer('Sydkust')).toEqual([]);
-  });
-
-  it('NEAR visas som en term', () => {
-    expect(termer('Rikstak NEAR/2 köper')).toEqual(['Rikstak NEAR/2 köper']);
+  it.each([
+    ['OR ger bara de grenar som träffade', 'Rikstak OR Sydkust OR Takvårdarna', ['Rikstak', 'Takvårdarna']],
+    ['AND ger alla termer', 'Rikstak AND takfirma', ['Rikstak', 'takfirma']],
+    ['NOT bidrar inte med någon term', 'Rikstak AND NOT Sydkust', ['Rikstak']],
+    ['en artikel som inte träffar ger ingen term', 'Sydkust', []],
+    ['NEAR visas som en term', 'Rikstak NEAR/2 köper', ['Rikstak NEAR/2 köper']],
+  ])('%s', (_namn, fråga, förväntat) => {
+    expect(termer(fråga)).toEqual(förväntat);
   });
 });
 

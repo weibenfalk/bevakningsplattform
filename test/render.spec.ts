@@ -5,21 +5,14 @@ const article = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('renderDigest: sammanfattningen är ren text', () => {
-  it('Markdown tolkas inte, utan visas som den står', () => {
-    const html = renderDigest([article({ summary: '**fet** [länk](javascript:alert(1))' })]);
-    expect(html).not.toContain('<strong>');
-    expect(html).not.toContain('<a href="javascript');
-    expect(html).toContain('**fet**');
-  });
-
-  it('HTML i sammanfattningen escapas', () => {
-    const html = renderDigest([article({ summary: '<img src=x onerror=alert(1)>' })]);
-    expect(html).not.toContain('<img');
-  });
-
-  it('tecken som < och & escapas', () => {
-    const html = renderDigest([article({ summary: 'a < b & c' })]);
-    expect(html).toContain('a &lt; b &amp; c');
+  it.each([
+    ['Markdown tolkas inte, utan visas som den står', '**fet** [länk](javascript:alert(1))', ['<strong>', '<a href="javascript'], ['**fet**']],
+    ['HTML i sammanfattningen escapas', '<img src=x onerror=alert(1)>', ['<img'], []],
+    ['tecken som < och & escapas', 'a < b & c', [], ['a &lt; b &amp; c']],
+  ])('%s', (_namn, summary, saknas, finns) => {
+    const html = renderDigest([article({ summary })]);
+    for (const text of saknas) expect(html).not.toContain(text);
+    for (const text of finns) expect(html).toContain(text);
   });
 });
 

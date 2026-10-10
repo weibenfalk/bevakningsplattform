@@ -85,15 +85,13 @@ describe('EntityImportService', () => {
   });
 
   describe('validering', () => {
-    it('avvisar en okänd bevakningsnivå', async () => {
-      const report = await importer.importCsv(csv('Ny AB,competitor,takvard,jättehög,,,x.se,Ny,,,'));
+    it.each([
+      ['en okänd bevakningsnivå', 'Ny AB,competitor,takvard,jättehög,,,x.se,Ny,,,', /bevakningsnivå/i],
+      ['ett okänt affärsområde', 'Ny AB,competitor,bilar,high,,,x.se,Ny,,,', /affärsområde/i],
+    ])('avvisar %s', async (_namn, rad, orsak) => {
+      const report = await importer.importCsv(csv(rad));
       expect(report.imported).toBe(0);
-      expect(report.rejected[0].reason).toMatch(/bevakningsnivå/i);
-    });
-
-    it('avvisar ett okänt affärsområde', async () => {
-      const report = await importer.importCsv(csv('Ny AB,competitor,bilar,high,,,x.se,Ny,,,'));
-      expect(report.rejected[0].reason).toMatch(/affärsområde/i);
+      expect(report.rejected[0].reason).toMatch(orsak);
     });
 
     it('trimmar namn och termer', async () => {

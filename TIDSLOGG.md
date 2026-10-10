@@ -1,12 +1,12 @@
 # Läsa uppgiften, kodgranskning och få koden körbar
 
-30 minuter
+45 minuter
 
 # Felrättningar och fix
 
-150 minuter
+180 minuter
 
 # Förstå kod, granska och rätta AI
 
-60 minuter
+100 minuter
 

@@ -34,13 +34,10 @@ describe('relevance (poängformeln)', () => {
 
   describe('uppföljning (×0,60 om storyn redan funnits i ett tidigare utskick)', () => {
     // 0,40 × 50 + 0,20 × 1 × 50 + 0,15 × 100 = 45
-    it('en uppföljning får 60 procent av poängen', () => {
+    it('en uppföljning får 60 procent av poängen, och false är samma som utelämnat', () => {
       expect(relevance(article(), NOW)).toBe(45);
       expect(relevance(article({ isFollowUp: true }), NOW)).toBe(27);
-    });
-
-    it('ingen uppföljning ger samma poäng som förut, och false är samma som utelämnat', () => {
-      expect(relevance(article({ isFollowUp: false }), NOW)).toBe(relevance(article(), NOW));
+      expect(relevance(article({ isFollowUp: false }), NOW)).toBe(45);
     });
 
     it('faktorerna multipliceras: uppföljning och låg säkerhet ger 0,60 × 0,50', () => {

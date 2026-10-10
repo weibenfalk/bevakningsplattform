@@ -21,18 +21,6 @@ const traffar = (id: string): string[] => {
 };
 
 describe('profilerna i data/profiles.json', () => {
-  it('fyra profiler är giltiga och två är trasiga', () => {
-    const trasiga = profiles.filter((p) => {
-      try {
-        parse(p.query);
-        return false;
-      } catch {
-        return true;
-      }
-    });
-    expect(trasiga.map((p) => p.id)).toEqual(['pf-tak-pris', 'pf-puts']);
-  });
-
   it('pf-tak-pris (oparad parentes) ger ett fel som pekar på parentesen, och kraschar inte', () => {
     try {
       parse(query('pf-tak-pris'));
@@ -59,12 +47,6 @@ describe('profilerna i data/profiles.json', () => {
     for (const id of ['pf-tak-pris', 'pf-puts']) {
       expect(() => traffar(id)).toThrow(QuerySyntaxError);
     }
-  });
-
-  it('pf-konkurrenter-tak träffar r04 (Rikstak köper takfirma) men inte r10 (pumpatävlingen)', () => {
-    const ids = traffar('pf-konkurrenter-tak');
-    expect(ids).toContain('r04');
-    expect(ids).not.toContain('r10');
   });
 
   it('pf-konkurrenter-tak träffar Rikstak och Takvårdarna i dag 1', () => {

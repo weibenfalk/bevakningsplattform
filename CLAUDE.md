@@ -9,7 +9,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 ## Status
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
-- `npm test`: 481 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
+- `npm test`: 464 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
 - De 11 kända felen är rättade, liksom flera fel som hittades vid granskningen (se statustabellen överst i `docs/kodgranskning.md`, som också visar vad som återstår). Före-läget med alla 11 som röda tester finns i git-historiken (commit `8cb6c87`, `test/kanda-fel/kanda-fel.spec.ts`).
 - Incidenten, pipelinebuggarna (plan 1 och 2) och dedupe/idempotens är gjorda. Hela datamodellen (krav 2) ligger i den första migrationen, men tabellerna för behörighet, profiler och utskick används inte av koden än (`content_scopes` styr omfånget).
 - Frågespråket (plan 3) är byggt i `src/query/` (tokenizer, parser, utvärdering) och inkopplat: `PipelineService` läser in profilerna, berikar och matchar profilerna mot de nya artiklarna (`profile_matches`). Mejlet visar "Varför: …" för användarens egna profiler. Profilerna filtrerar **inte** urvalet (se beslutsloggen).
@@ -30,6 +30,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 6. **Ändra aldrig den ärvda logiken tyst.** Förklara alltid vad som var fel och varför.
 7. **Uppdatera statustabellen** överst i `docs/kodgranskning.md` varje gång ett fel rättas (eller ett nytt hittas):
    status, testet som bevisar det och hänvisning till beslutet i `docs/beslutslogg.md`.
+8. **Ett test per beteende.** Varianter av samma beteende med olika indata skrivs som `test.each` med en tabell, inte som flera nästan likadana test. Skriv inget test för trivialiteter (att en konstant har ett visst värde, att en fil heter något) och inget som bara upprepar ett annat test: kontrollera att ett namngivet test täcker samma sak innan du tar bort något. Säkerhetstesten (behörighet, fulltext, HTML, länkar, export) behåller sina assertioner.
 
 ## Plan, i prioritetsordning
 
@@ -40,7 +41,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
    40 tester inklusive syntaxfel (se `data/profiles.json`: `pf-tak-pris` har en oparad parentes och `pf-puts` en
    inledande `*`). Kopplas sedan till `profile_matches` (tabellen finns redan).
 4. **Dokumentation**: `ÖVERLÄMNING.md` (vad fungerar, vad fungerar inte, risker och nästa steg i ordning), `TIDSLOGG.md`
-   och färdig beslutslogg med AI-logg (AI-loggen har sju punkter, varav fyra där AI:n hade fel eller avvisades).
+   och färdig beslutslogg med AI-logg (AI-loggen har åtta punkter, varav fem där AI:n hade fel eller avvisades).
 
 **Medvetet bortvalt** (dokumenteras som nästa steg i ÖVERLÄMNING.md): AI-router med budgettak, hallucinationsskydd,
 verifiering av akutlarm mot en andra källa, riktiga insamlare och robots.txt, embeddings, sök, redaktörsgränssnitt,

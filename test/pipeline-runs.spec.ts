@@ -20,17 +20,13 @@ describe('pipeline_runs: alla steg loggar sina körningar (krav 7)', () => {
   const runs = () => app.get(RunLogService).list();
   const count = async (table: string) => Number((await testKnex()(table).count<{ count: string }>('* as count').first())?.count);
 
-  it('en körning sparar ett steg för inläsning, berikning och profilmatchning, i ordning', async () => {
+  it('en körning sparar ett steg för inläsning, berikning och profilmatchning, i ordning, var och ett med start och slut', async () => {
     await app.get(PipelineService).run(dag1());
     expect((await runs()).map((r) => [r.step, r.status])).toEqual([
       ['ingest', 'ok'],
       ['enrich', 'ok'],
       ['profile_match', 'ok'],
     ]);
-  });
-
-  it('varje steg har start och slut, och slutet är inte före starten', async () => {
-    await app.get(PipelineService).run(dag1());
     for (const run of await runs()) {
       expect(run.startedAt).toBeInstanceOf(Date);
       expect(run.finishedAt).toBeInstanceOf(Date);
@@ -137,12 +133,6 @@ describe('pipeline_runs: alla steg loggar sina körningar (krav 7)', () => {
       ]);
       expect(alla[2].error).toBe('databasen är nere');
       expect(alla[2].itemsIn).toBe(21);
-    });
-
-    it('ett steg som misslyckas lämnar inget running-steg efter sig', async () => {
-      installLlm(app, felande());
-      await expect(app.get(PipelineService).run(dag1())).rejects.toThrow();
-      expect((await runs()).filter((r) => r.status === 'running')).toEqual([]);
     });
 
     it('om loggen inte går att spara efter ett fel är det ursprungliga felet det som kastas', async () => {

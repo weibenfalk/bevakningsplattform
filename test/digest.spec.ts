@@ -25,15 +25,12 @@ describe('DigestService: andra källor', () => {
     expect(html).toContain('Synlig källa');
   });
 
-  it('visar aldrig källor från artiklar utanför användarens arbetsyta', async () => {
+  it.each([
+    ['utanför användarens arbetsyta', ['Hemlig takvårdskälla', 'hemlig.example.se']],
+    ['flaggade för granskning', ['Flaggad källa']],
+  ])('visar aldrig källor från artiklar %s', async (_namn, texter) => {
     const html = await app.get(DigestService).compose('u-anna');
-    expect(html).not.toContain('Hemlig takvårdskälla');
-    expect(html).not.toContain('hemlig.example.se');
-  });
-
-  it('visar aldrig källor från artiklar flaggade för granskning', async () => {
-    const html = await app.get(DigestService).compose('u-anna');
-    expect(html).not.toContain('Flaggad källa');
+    for (const text of texter) expect(html).not.toContain(text);
   });
 
   it('visar inte nekade entiteter eller kategorier som andra källor', async () => {

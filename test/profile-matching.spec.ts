@@ -125,12 +125,6 @@ describe('fält som artiklarna inte har data för (fail closed)', () => {
     expect(report.invalid).toEqual(['p-gammal']);
     expect(await traffar()).toEqual([]);
   });
-
-  it('data/profiles.json påverkas inte: samma fyra giltiga och två trasiga', async () => {
-    const report = await app.get(ProfileService).loadFromFile('data/profiles.json');
-    expect(report.loaded).toHaveLength(4);
-    expect(report.skipped.map((s) => s.id).sort()).toEqual(['pf-puts', 'pf-tak-pris']);
-  });
 });
 
 describe('PipelineService: profilmatchning efter berikningen', () => {

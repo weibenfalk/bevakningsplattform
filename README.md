@@ -130,7 +130,7 @@ npm run typecheck
 
 ### Testfiler
 
-481 tester i 34 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+464 tester i 34 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -142,12 +142,12 @@ testdatabasen.
 | `export.spec.ts` | Export: roll i `AuthGuard`, `?userId=` bara för admin, skydd mot CSV-formler | 14 | delvis |
 | `app.spec.ts` | Servern över HTTP: 401/403/400, admin, `PORT`, bindning till `127.0.0.1` | 10 | ja |
 | `digest.spec.ts` | Utskick: andra källor inom omfånget, tröskel och sortering före begränsning | 8 | ja |
-| `enrich.spec.ts` | Berikningen: kategori och arbetsyta ur fasta listor, fail closed, relevans, triage i pipelinen, stubben | 25 | delvis |
-| `ingest.spec.ts` | Inläsning: teckenkodning, tidszon (Europe/Stockholm), ogiltigt datum | 22 | delvis |
+| `enrich.spec.ts` | Berikningen: kategori och arbetsyta ur fasta listor, fail closed, relevans, triage i pipelinen, stubben | 26 | delvis |
+| `ingest.spec.ts` | Inläsning: teckenkodning, tidszon (Europe/Stockholm), ogiltigt datum | 25 | delvis |
 | `dedupe.spec.ts` | Dubbletter och idempotens: normaliserad URL som identitet, omkörning, d02 och r09 | 12 | ja |
 | `normalize-url.spec.ts` | `normalizeUrl`: spårningsparametrar, fragment, värdnamn | 5 | nej |
 | `triage.spec.ts` | Triage: ogiltiga svar släpper inte igenom något, poängintervall, omgångar, avgränsning mot injektion | 15 | nej |
-| `score.spec.ts` | Poängformeln: högst viktade entiteten, källvikt, färskhet, ingen NaN | 4 | nej |
+| `score.spec.ts` | Poängformeln: högst viktade entiteten, källvikt, färskhet, ingen NaN | 6 | nej |
 | `similarity.spec.ts` | Cosinuslikhet och `isSameStory` | 8 | nej |
 | `entity-matcher.spec.ts` | Entitetsmatchning: tomma termer, genitiv, Unicode-gränser, skiftläge | 11 | nej |
 | `entity-import.spec.ts` | Entitetsimport: validering, ihopslagning, mappning, `meta_page_id`, inga vd-namn | 11 | ja |
@@ -155,20 +155,20 @@ testdatabasen.
 | `database-config.spec.ts` | `resolveDatabaseUrl` och att `knexProvider` använder den | 4 | nej |
 | `pipeline-config.spec.ts` | Tröskeln för triage ur miljön (tom eller ogiltig ger standardvärdet, inte 0) | 2 | nej |
 | `query-tokenizer.spec.ts` | Frågespråkets tokenizer: ord, fraser, NEAR, å/ä/ö, wildcard och syntaxfel med position | 30 | nej |
-| `query-parser.spec.ts` | Frågespråkets parser: träd, prioritet, implicit AND, fält, NEAR och syntaxfel (oparad parentes m.fl.) och fält som inte stöds | 44 | nej |
+| `query-parser.spec.ts` | Frågespråkets parser: träd, prioritet, implicit AND, fält, NEAR och syntaxfel (oparad parentes m.fl.) och fält som inte stöds | 50 | nej |
 | `query-evaluator.spec.ts` | Frågespråkets utvärdering: ord, fraser, prefix, fält, NEAR, svenska regler | 31 | nej |
-| `query-profiles.spec.ts` | Profilerna i `data/profiles.json`: de två trasiga ger fel, de giltiga träffar rätt artiklar | 11 | nej |
-| `profile-matching.spec.ts` | Profiler in (versioner, trasiga hoppas över), matchning i pipelinen, idempotens, ägarens omfång, fält som saknar data (fail closed) | 22 | ja |
+| `query-profiles.spec.ts` | Profilerna i `data/profiles.json`: de två trasiga ger fel, de giltiga träffar rätt artiklar | 9 | nej |
+| `profile-matching.spec.ts` | Profiler in (versioner, trasiga hoppas över), matchning i pipelinen, idempotens, ägarens omfång, fält som saknar data (fail closed) | 21 | ja |
 | `profile-digest.spec.ts` | "Varför: …" i mejlet: bara egna profiler och senaste version, urvalet oförändrat | 10 | delvis |
 | `updates.spec.ts` | Uppdateringar (d02 uppdaterar r02): ny text och poäng, uppföljning, äldre version, ogiltigt svar | 13 | ja |
 | `delivery.spec.ts` | Utskicksloggen i utgåvor och leveranser (inget skickas igen), uppföljningar och rättelser som alltid är med | 22 | ja |
-| `day2.spec.ts` | Dag 2 med de riktiga posterna: d01, d02, d05 och vad varje användare får | 10 | ja |
-| `correction.spec.ts` | Vad som räknas som rättelse | 12 | nej |
-| `pipeline-runs.spec.ts` | Krav 7: `pipeline_runs` får en rad per körning av inläsning, berikning och profilmatchning (start, slut, antal, fel) | 12 | ja |
-| `query-data.spec.ts` | Datan i `npm run query`: samma filer som demon (inkl. r19–r22) och reparerad teckenkodning | 3 | nej |
-| `query-describe.spec.ts` | Utskriften i `npm run query`: tokens, träd, träffande termer och felmarkering | 11 | nej |
+| `day2.spec.ts` | Dag 2 med de riktiga posterna: d01, d02, d05 och vad varje användare får | 8 | ja |
+| `correction.spec.ts` | Vad som räknas som rättelse | 11 | nej |
+| `pipeline-runs.spec.ts` | Krav 7: `pipeline_runs` får en rad per körning av inläsning, berikning och profilmatchning (start, slut, antal, fel) | 10 | ja |
+| `query-data.spec.ts` | Datan i `npm run query`: samma filer som demon (inkl. r19–r22) och reparerad teckenkodning | 2 | nej |
+| `query-describe.spec.ts` | Utskriften i `npm run query`: tokens, träd, träffande termer och felmarkering | 12 | nej |
 | `query-no-regex.spec.ts` | Krav 4: ingen regex i `src/query` (kontrolleras med TypeScript-kompilatorn) | 3 | nej |
-| `test-database.spec.ts` | Testdatabasen: `_test`-skyddet och att testerna körs mot `bevakning_test` | 6 | delvis |
+| `test-database.spec.ts` | Testdatabasen: `_test`-skyddet och att testerna körs mot `bevakning_test` | 5 | delvis |
 
 Hjälpfiler (inga tester): `helpers.ts` (testapp, `seedArticles`, `scriptedLlm`), `architecture-scan.ts` (detektorn bakom arkitekturtestet), `test-database.ts`, `jest.env.ts` och
 `jest.global-setup.ts`.

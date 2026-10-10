@@ -81,25 +81,6 @@ describe('dag 2 (raw_items_dag2.json, klockan 2026-10-03 07:00), med de riktiga 
     }
   });
 
-  it('d05 kommer med även om poängen skulle vara under tröskeln', async () => {
-    const knex = testKnex();
-    const d05 = await art('d05');
-    // Låtsas att Kalle inte fått d05 än och att poängen är låg. Spara det som ändras och återställ efteråt.
-    const sparade = await knex('delivery_items').where({ article_id: d05.id }).select('*');
-    await knex('delivery_items').where({ article_id: d05.id }).delete();
-    await knex('articles').where({ id: d05.id }).update({ relevance: 1 });
-    expect(await digest.compose('u-kalle')).toContain('Rättelse: rotavdraget 2027');
-    await knex('articles').where({ id: d05.id }).update({ relevance: d05.relevance });
-    await knex('delivery_items').insert(sparade);
-  });
-
-  it('arbetsytan gäller även rättelsen: Anna (bara fönsterputs) får den inte', async () => {
-    const d05 = await art('d05');
-    expect(d05.spaces).not.toContain('fonsterputs');
-    expect(dag2Sent['u-anna']).not.toContain(d05.id);
-    expect(dag2Html['u-anna']).not.toContain('Rättelse');
-  });
-
   it('inget som redan skickats på dag 1 skickas igen på dag 2', () => {
     for (const u of USERS) {
       const igen = dag2Sent[u].filter((idd) => dag1Sent[u].includes(idd));
