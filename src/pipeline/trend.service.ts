@@ -1,21 +1,15 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { Knex } from 'knex';
-import { KNEX } from '../db/knex.provider';
+import { Injectable } from '@nestjs/common';
+import { ArticleAccessService } from '../access/article-access.service';
 
 const WINDOW_DAYS = 30;
 const MIN_HITS = 3;
 
 @Injectable()
 export class TrendService {
-  constructor(@Inject(KNEX) private readonly knex: Knex) {}
+  constructor(private readonly access: ArticleAccessService) {}
 
   async isTrending(entityId: string, now: Date): Promise<boolean> {
     const since = new Date(now.getTime() - WINDOW_DAYS * 864e5);
-    const row = await this.knex('entity_matches')
-      .where('entity_id', entityId)
-      .andWhere('created_at', '>=', since)
-      .count<{ count: string }>('* as count')
-      .first();
-    return Number(row?.count ?? 0) >= MIN_HITS;
+    return (await this.access.countEntityMatches(entityId, since)) >= MIN_HITS;
   }
 }

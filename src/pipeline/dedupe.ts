@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Knex } from 'knex';
+import { StoredIdentity } from '../access/article-access.service';
 import { RawItem } from '../types';
 import { normalizeUrl } from './normalize-url';
 
@@ -43,22 +43,25 @@ interface Known {
   hash: string | null;
 }
 
+/** Hämtar identiteten hos sparade artiklar (via åtkomstmodulen, som är enda stället som läser `articles`). */
+export type StoredLookup = (urls: string[], rawIds: string[]) => Promise<StoredIdentity[]>;
+
 /**
  * Delar upp inkommande poster i nya, redan sparade och överhoppade. Identiteten är den normaliserade URL:en
  * (inte `raw_id`, som kommer från källan och inte är pålitligt). Den första posten vinner. Körs före triage och
  * berikning, så att en omkörning inte kostar några AI-anrop (krav 7: idempotens).
  */
-export async function splitFresh(knex: Knex, entries: Entry[]): Promise<DedupeResult> {
+export async function splitFresh(lookupStored: StoredLookup, entries: Entry[]): Promise<DedupeResult> {
   const urls = entries.map(({ prepared }) => {
     try { return normalizeUrl(prepared.url); } catch { return null; }
   });
 
-  const stored = await knex('articles')
-    .whereIn('url', urls.filter((u): u is string => u !== null))
-    .orWhereIn('raw_id', entries.map((e) => e.prepared.id))
-    .select('raw_id', 'url', 'content_hash');
-  const byUrl = new Map<string, Known>(stored.map((r: any) => [r.url, { rawId: r.raw_id, hash: r.content_hash }]));
-  const byId = new Set<string>(stored.map((r: any) => r.raw_id));
+  const stored = await lookupStored(
+    urls.filter((u): u is string => u !== null),
+    entries.map((e) => e.prepared.id),
+  );
+  const byUrl = new Map<string, Known>(stored.map((r) => [r.url, { rawId: r.raw_id, hash: r.content_hash }]));
+  const byId = new Set<string>(stored.map((r) => r.raw_id));
 
   const result: DedupeResult = { fresh: [], skipped: [], alreadyStored: 0 };
   const seenId = new Set<string>();

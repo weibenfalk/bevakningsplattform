@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Knex } from 'knex';
+import { ArticleAccessService } from '../access/article-access.service';
 import { CLOCK, Clock } from '../config/clock';
 import { SOURCE_WEIGHTS } from '../config/sources';
 import { KNEX } from '../db/knex.provider';
@@ -46,6 +47,7 @@ export class EnrichService {
     private readonly triage: TriageService,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(SOURCE_WEIGHTS) private readonly sourceWeights: Map<string, number>,
+    private readonly access: ArticleAccessService,
   ) {}
 
   async run(items: RawItem[], now: Date = this.clock.now()): Promise<EnrichReport> {
@@ -60,7 +62,7 @@ export class EnrichService {
     });
 
     // Dubbletter och redan sparade poster sållas bort före triage och berikning (idempotens, krav 7).
-    const { fresh, skipped, alreadyStored } = await splitFresh(this.knex, entries);
+    const { fresh, skipped, alreadyStored } = await splitFresh((urls, rawIds) => this.access.storedIdentities(urls, rawIds), entries);
     await this.recordSkipped(skipped);
     const prepared = fresh.map((e) => e.prepared);
     const triaged = await this.triage.filter(prepared);

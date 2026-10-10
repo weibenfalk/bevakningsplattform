@@ -9,6 +9,13 @@ export interface ArticleQuery {
   limit?: number;
 }
 
+/** Det dubblettkontrollen behöver veta om en sparad artikel. Ingen text. */
+export interface StoredIdentity {
+  raw_id: string;
+  url: string;
+  content_hash: string | null;
+}
+
 /** En artikelrad så som den lämnar åtkomstmodulen. Ingen fulltext. */
 export interface ArticleRow {
   id: number;
@@ -88,6 +95,31 @@ export class ArticleAccessService {
       .select(PUBLIC_COLUMNS as unknown as string[])
       .orderBy([{ column, order }, { column: 'id', order: 'asc' }])
       .limit(opts.limit ?? 100) as unknown as Promise<ArticleRow[]>;
+  }
+
+  /**
+   * Identiteten (id, URL och innehållshash) hos redan sparade artiklar, för dubblettkontrollen i pipelinen (krav 7).
+   * Medvetet utan användaromfång: dubbletter måste upptäckas oavsett vem som får se artikeln. Därför lämnar den bara
+   * dessa tre kolumner, och den används aldrig för att visa något för en användare.
+   */
+  async storedIdentities(urls: string[], rawIds: string[]): Promise<StoredIdentity[]> {
+    return this.knex('articles')
+      .whereIn('url', urls)
+      .orWhereIn('raw_id', rawIds)
+      .select('raw_id', 'url', 'content_hash');
+  }
+
+  /**
+   * Antal träffar för en entitet sedan en viss tid, för trendberäkningen. Medvetet utan användaromfång: det är en
+   * siffra över hela systemet och ingen artikel lämnar modulen.
+   */
+  async countEntityMatches(entityId: string, since: Date): Promise<number> {
+    const row = await this.knex('entity_matches')
+      .where('entity_id', entityId)
+      .andWhere('created_at', '>=', since)
+      .count<{ count: string }>('* as count')
+      .first();
+    return Number(row?.count ?? 0);
   }
 
   /**

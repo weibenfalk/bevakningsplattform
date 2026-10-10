@@ -9,7 +9,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 ## Status
 
 - Commit 1: ärvd kod, oförändrad. Commit 2–3: koden körbar (Docker, migration, demo, tester) och beroenden uppgraderade.
-- `npm test`: 364 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
+- `npm test`: 401 tester, gröna, i den vanliga sviten (`test/`). Äldre ärvda tester som testade fel saker är ersatta.
 - De 11 kända felen är rättade, liksom flera fel som hittades vid granskningen (se statustabellen överst i `docs/kodgranskning.md`, som också visar vad som återstår). Före-läget med alla 11 som röda tester finns i git-historiken (commit `8cb6c87`, `test/kanda-fel/kanda-fel.spec.ts`).
 - Incidenten, pipelinebuggarna (plan 1 och 2) och dedupe/idempotens är gjorda. Hela datamodellen (krav 2) ligger i den första migrationen, men tabellerna för behörighet, profiler och utskick används inte av koden än (`content_scopes` styr omfånget).
 - Frågespråket (plan 3) är byggt i `src/query/` (tokenizer, parser, utvärdering) och inkopplat: `PipelineService` läser in profilerna, berikar och matchar profilerna mot de nya artiklarna (`profile_matches`). Mejlet visar "Varför: …" för användarens egna profiler. Profilerna filtrerar **inte** urvalet (se beslutsloggen).
@@ -33,7 +33,7 @@ Bedömningen gäller **beslut och motiveringar, inte mängd kod**, och sker i f�
 ## Plan, i prioritetsordning
 
 1. ~~**Incidenten**~~ (klar): `ArticleAccessService` med omfång som alltid gäller, explicita kolumner och vitlistad `sort`. `EnrichService` utan modellstyrd arbetsyta och utan reserv till originaltexten. `render.ts` utan `marked` och med bara http(s)-länkar. `otherSources` via åtkomstmodulen. `?userId=` bara för admin.
-   - **Kvar:** arkitekturtestet fångar fortfarande inte `knex('articles')`. Bygg det med TypeScript-kompilatorn i stället för regex.
+   - Arkitekturtestet läser koden med TypeScript-kompilatorn (`test/architecture-scan.ts`) och fångar alla sätt att nå innehållstabellerna utanför `src/access`. Undantag finns bara för skrivning i pipelinen (listan i `test/architecture.spec.ts`, med motivering).
 2. ~~**Pipelinebuggar**~~ (klar, utom det som står som "kvar" i statustabellen): `normalizeUrl`, entitetsmatchning, entitetsimport, similarity och triage.
 3. **Frågespråket** (krav 4 i specifikationen) – **klar och inkopplad** (se beslutsloggen). Kvar: frågetestare mot arkivet och semantisk del. Ursprungligt krav: egen tokenizer och rekursiv parser **utan reguljära uttryck**, med minst
    40 tester inklusive syntaxfel (se `data/profiles.json`: `pf-tak-pris` har en oparad parentes och `pf-puts` en

@@ -124,7 +124,7 @@ npm run typecheck
 
 ### Testfiler
 
-364 tester i 29 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
+401 tester i 29 filer. "Databas" visar om filen använder `bevakning_test` (ja), bara delvis (delvis, resten är rena
 enhetstester) eller inte alls (nej). Hela sviten kräver ändå att Postgres är igång, eftersom `globalSetup` skapar
 testdatabasen.
 
@@ -145,7 +145,7 @@ testdatabasen.
 | `similarity.spec.ts` | Cosinuslikhet och `isSameStory` | 8 | nej |
 | `entity-matcher.spec.ts` | Entitetsmatchning: tomma termer, genitiv, Unicode-gränser, skiftläge | 11 | nej |
 | `entity-import.spec.ts` | Entitetsimport: validering, ihopslagning, mappning, `meta_page_id`, inga vd-namn | 11 | ja |
-| `architecture.spec.ts` | Arkitekturregel: bara `src/access` läser innehållstabellerna (en textsökning, se fel 23) | 1 | nej |
+| `architecture.spec.ts` | Krav 1: bara `src/access` läser innehållstabellerna (TypeScript-kompilatorn, se fel 23), undantag bara för skrivning i pipelinen, och detektorn mot 18 sätt att läsa | 38 | nej |
 | `database-config.spec.ts` | `resolveDatabaseUrl` och att `knexProvider` använder den | 4 | nej |
 | `pipeline-config.spec.ts` | Tröskeln för triage ur miljön (tom eller ogiltig ger standardvärdet, inte 0) | 2 | nej |
 | `query-tokenizer.spec.ts` | Frågespråkets tokenizer: ord, fraser, NEAR, å/ä/ö, wildcard och syntaxfel med position | 30 | nej |
@@ -159,7 +159,7 @@ testdatabasen.
 | `query-no-regex.spec.ts` | Krav 4: ingen regex i `src/query` (kontrolleras med TypeScript-kompilatorn) | 3 | nej |
 | `test-database.spec.ts` | Testdatabasen: `_test`-skyddet och att testerna körs mot `bevakning_test` | 6 | delvis |
 
-Hjälpfiler (inga tester): `helpers.ts` (testapp, `seedArticles`, `scriptedLlm`), `test-database.ts`, `jest.env.ts` och
+Hjälpfiler (inga tester): `helpers.ts` (testapp, `seedArticles`, `scriptedLlm`), `architecture-scan.ts` (detektorn bakom arkitekturtestet), `test-database.ts`, `jest.env.ts` och
 `jest.global-setup.ts`.
 
 **Testerna har en egen databas.** De kör mot `bevakning_test` på samma Postgres-server som demon, och `npm test`
