@@ -75,6 +75,27 @@ Allt med status "rättat" i statustabellen. I korthet:
 | **Inga riktiga mejl** | Utskicket sparas och renderas till `out/`, men skickas inte. Plaintextversion, dark mode och avregistreringslänk saknas. | `src/digest/` |
 | **Prestandakraven är inte mätta** | Inget av kraven i specens avsnitt 10 (till exempel arkivsök under 800 ms) är mätt. | – |
 
+## Kvar från besluten (kort, en rad per punkt)
+
+Det här stod som "kvarstår" i beslutsloggen. Beslutsloggen innehåller bara besluten, så det finns samlat här.
+
+- **Entiteter:** organisationsnummer har olika format och normaliseras inte, `type = own_brand` styr ingenting i pipelinen, och `entities.id` är ett heltal medan `articles.entity_ids` är text.
+- **Entitetsmatchning:** bara genitiv-s hanteras och alias är skiftlägeskänsliga, så "RIKSTAK" och "rikstak" missas. Lösning: en flagga per alias i registret, eller en andra signal (domän, organisationsnummer).
+- **Inläsning:** en lokal tid som inte finns eller inträffar två gånger (sommartidens start och slut) får en av två tolkningar, och bara UTF-8 lästa som Latin-1 repareras.
+- **`raw_id` är unikt:** den andra r09 sparas inte som artikel utan ligger hel i `skipped_items`. Öppet val: göra `raw_id` icke-unikt när det är klarlagt om id-kollisioner är ett källfel.
+- **Uppdateringar:** den tidigare versionen sparas inte (ingen historik), en uppdatering av en flaggad artikel med giltigt svar blir synlig, och det finns inget lås mot två samtidiga körningar.
+- **Körningslogg:** inläsningen av profiler loggas inte, `running`-rader efter en krasch städas inte, och `pipeline_runs` rensas aldrig (listan `articleIds` per profilkörning växer).
+- **Rensning:** `delivery_items` och `profile_versions` ingår inte, och inget schemalägger jobbet.
+- **Profilmatchning:** artiklar som sparats men inte hunnit matchas före en krasch matchas aldrig (behöver en markering per artikel och profilversion), 100 profiler per artikel under 200 ms är inte mätt (frågan tolkas om per profil och körning), och den semantiska delen, filtren och profilens extra instruktion används inte.
+- **Träffar som förvånar:** `pf-rena` träffar städtipset r08 och `pf-konkurrenter-tak` träffar injektionstexten r19, eftersom frågor är skiftlägesokänsliga. Skriv profilerna snävare (till exempel `entity:"Rena Fönster"`).
+- **Fält:** `author`, `region` och `lang` läggs till i `PROFILE_FIELDS` när artiklarna får dem (språkigenkänning, insamlare som levererar dem).
+- **Omfång:** inget gränssnitt eller API sätter listorna i `content_scopes`. En artikel utan källa träffas inte av en nekad källa men släpps inte in av en icke-tom `allow_sources` (antagande att stämma av).
+- **Kategorier:** `eget_varumarke` och `ovrigt` är våra tillägg till specens lista, och äldre rader med tom `categories` döljs inte av `deny_categories`.
+- **HTTP:** bara exporten och adminvägarna finns. Sök, arkiv, API och utskick (specens "omfånget gäller överallt") saknar endpoints.
+- **Utskick:** tröskeln 55 och gränsen 18 artiklar är gissade, ett tomt utskick skapar ingen leverans, och "Även:" i mejlet ska använda `sourceLabel` (visar i dag id:t) när klustringen byggs.
+- **Arkitekturtestet:** skannar bara `src` (skript och tester undantas) och känner igen en knex-instans på namnet (`knex`, `trx`, `tx`, `db`).
+- **Adminvyn:** `view-as` visar högst 200 artiklar, profiler visas med id, och uteslutningar räknas bara på den senaste profilkörningen om den sparat `articleIds`.
+
 ## Nästa steg, i ordning
 
 **1. Gör det som finns användbart och säkert.**
