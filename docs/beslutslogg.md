@@ -17,7 +17,7 @@ Varje post har datum, beslut, alternativ, varför och bevis (testfil). Det som k
 
 ## 2026-10-09: Körbar kod först, versioner och tester
 - **Beslut:** Den ärvda koden gjordes körbar oförändrad (Docker, migration, demo) och de 11 kända felen bevisades som röda tester före varje rättning. Därefter flyttades testerna till den vanliga sviten och `test/kanda-fel` togs bort. Senaste paketversioner, utom NestJS 11, TypeScript 6 och `marked` (som togs bort).
-- **Alternativ:** Skriva om direkt. Gå över till NestJS 12 och ES-moduler. Behålla en tom `kanda-fel`-mapp med `--passWithNoTests`.
+- **Alternativ:** Skriva om direkt. Gå över till NestJS 12. Behålla en tom `kanda-fel`-mapp med `--passWithNoTests`.
 - **Varför:** Felen ska kunna visas och inte bara påstås, och varje rättning bevisas rött till grönt (före-läget finns i commit `8cb6c87`). Versionen av NestJS är ett antagande: varken uppgiften eller den ärvda koden anger någon. Belägg: NestJS 12 släpptes 2026-08-27, strax före uppgiften (kontrollerat med `npm view @nestjs/core time`), så produktionen kör sannolikt inte 12. Därför användes 11, vilket också höll projektet på CommonJS. Antagandet bör stämmas av med företaget.
 - **Bevis:** `access.spec.ts`, `enrich.spec.ts`, `render.spec.ts`, `normalize-url.spec.ts`, `entity-matcher.spec.ts`, `similarity.spec.ts`
 
