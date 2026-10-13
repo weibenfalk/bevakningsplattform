@@ -62,7 +62,7 @@ larmmotor och kalibrering av trösklar. Samma gäller att koppla in behörighets
 - Koncern är en egen arbetsyta, inte en överordnad som ser allt.
 - Tidsstämplar utan tidszon tolkas som Europe/Stockholm.
 - Klockan vid körning: dag 1 = 2026-10-01 07:00, dag 2 (`raw_items_dag2.json`) = 2026-10-03 07:00.
-- NestJS 11 (inte 12) antas motsvara produktionens version.
+- NestJS 11 (inte 12) antas motsvara produktionens version. Belägg: NestJS 12 släpptes 2026-08-27, strax före uppgiften, så produktionen kör sannolikt inte 12. Varken uppgiften eller den ärvda koden anger någon version.
 
 ## Kommandon
 

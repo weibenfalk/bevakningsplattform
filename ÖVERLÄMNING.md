@@ -186,4 +186,5 @@ Ingen av dessa läcker data. De gör koden svårare att ändra, eller är kända
 - `matchWholeArchive` är det enda undantaget från att originaltexten aldrig läses ut ur åtkomstmodulen. `test/raw-text.spec.ts` bevakar det.
 - Adminvyn `view-as` visar högst 200 artiklar, profiler visas med id, och uteslutningar räknas bara på den senaste profilkörningen om den sparat `articleIds`.
 - Kategorierna `eget_varumarke` och `ovrigt` är våra tillägg till specens lista.
+- **Öppen fråga: vilken NestJS-version kör ni i produktion?** Vi antog 11 (och därmed CommonJS). Varken uppgiften eller den ärvda koden anger någon version. Beläggen är att NestJS 12 släpptes 2026-08-27, strax före uppgiften, så produktionen kör sannolikt inte 12. Kör ni 12 behöver projektet gå över till ES-moduler (`"type": "module"` och ändrad modulinställning i `tsconfig.json`) och `@nestjs/config` uppgraderas till 12. Hur stort bytet blir är inte provat. Se beslutsloggen, posten 2026-10-09.
 - `CLAUDE.md` innehåller arbetsreglerna som användes med AI-verktyget. Följ dem, särskilt "test först" och "uppdatera statustabellen".
