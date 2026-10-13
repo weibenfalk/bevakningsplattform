@@ -167,7 +167,7 @@ Ingen av dessa läcker data. De gör koden svårare att ändra, eller är kända
 | Källornas vikt | `data/sources.json` | Ändra `weight`. Under 1,0 kan källan inte skapa en trend (`trend.service.ts`). |
 | En ny profil | `data/profiles.json` | Lägg till `id`, `user` och `query`. Pröva frågan med `npm run query -- '<fråga>'`. En trasig fråga hoppas över med ett felmeddelande. |
 | En ny användare | `data/users.json` | Lägg till `id`, `name`, `role` och `scopes`. Demon skriver in `scopes` i `content_scopes`. I produktion sätts de direkt i den tabellen. Admin styrs av `ADMIN_USER_IDS`. |
-| Klockan | `src/config/clock.ts` | Sätt `PIPELINE_NOW` (till exempel `2026-10-03T07:00:00+02:00`). I produktion byts den mot systemklockan. |
+| Klockan | `src/config/clock.ts` | Sätt `PIPELINE_NOW` (till exempel `2026-10-03T07:00:00+02:00`). I produktion byts den mot systemklockan genom att raden `{ provide: CLOCK, useValue: fixedClock() }` i `src/app.module.ts` byts mot `{ provide: CLOCK, useValue: { now: () => new Date() } }`. |
 
 ## Bra att veta
 
