@@ -9,7 +9,7 @@ import { explain, matches } from '../query/evaluator';
 import { parse } from '../query/parser';
 import { QuerySyntaxError } from '../query/tokenizer';
 import { StoredArticle } from './enrich.service';
-import { RunLogService } from './run-log.service';
+import { RunLogService } from '../runs/run-log.service';
 
 export interface MatchReport {
   /** Profiler som kördes. */

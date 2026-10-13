@@ -3,7 +3,7 @@ import { Knex } from 'knex';
 import { CLOCK, Clock } from '../config/clock';
 import { pipelineConfig } from '../config/pipeline.config';
 import { KNEX } from '../db/knex.provider';
-import { RunLogService } from './run-log.service';
+import { RunLogService } from '../runs/run-log.service';
 
 export interface PurgeReport {
   /** Artiklar vars fulltext rensades. */

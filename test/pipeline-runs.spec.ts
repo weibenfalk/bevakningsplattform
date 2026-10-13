@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { LlmProvider } from '../src/llm/llm.provider';
 import { EnrichService } from '../src/pipeline/enrich.service';
 import { PipelineService } from '../src/pipeline/pipeline.service';
-import { RunLogService } from '../src/pipeline/run-log.service';
+import { RunLogService } from '../src/runs/run-log.service';
 import { ProfileService } from '../src/profiles/profile.service';
 import { RawItem } from '../src/types';
 import { closeTestingApp, createTestingApp, installLlm, scriptedLlm, testKnex } from './helpers';

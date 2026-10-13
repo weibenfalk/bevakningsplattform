@@ -1,49 +1,30 @@
 import { Module } from '@nestjs/common';
-import { ArticleAccessService } from './access/article-access.service';
-import { ContentScopeService } from './access/content-scope.service';
-import { AdminController } from './admin/admin.controller';
-import { QueryTestService } from './admin/query-test.service';
-import { ExportController } from './admin/export.controller';
-import { CLOCK, fixedClock } from './config/clock';
-import { SOURCE_NAMES, SOURCE_WEIGHTS, loadSourceNames, loadSourceWeights } from './config/sources';
-import { USER_DIRECTORY, loadUserDirectory } from './config/users';
-import { knexProvider } from './db/knex.provider';
-import { DigestService } from './digest/digest.service';
-import { EntityImportService } from './import/entity-import.service';
-import { LLM } from './llm/llm.provider';
-import { StubProvider } from './llm/stub.provider';
-import { EnrichService } from './pipeline/enrich.service';
-import { PipelineService } from './pipeline/pipeline.service';
-import { PurgeService } from './pipeline/purge.service';
-import { ProfileMatchService } from './pipeline/profile-match.service';
-import { ProfileService } from './profiles/profile.service';
-import { RunLogService } from './pipeline/run-log.service';
-import { TrendService } from './pipeline/trend.service';
-import { TriageService } from './pipeline/triage.service';
+import { AccessModule } from './access/access.module';
+import { AdminModule } from './admin/admin.module';
+import { AppConfigModule } from './config/app-config.module';
+import { DatabaseModule } from './db/database.module';
+import { DigestModule } from './digest/digest.module';
+import { ExportModule } from './export/export.module';
+import { ImportModule } from './import/import.module';
+import { LlmModule } from './llm/llm.module';
+import { PipelineModule } from './pipeline/pipeline.module';
+import { ProfilesModule } from './profiles/profiles.module';
+import { RunsModule } from './runs/runs.module';
 
-/** Hela applikationen i en modul. Att dela upp den per område står som kodskuld i ÖVERLÄMNING.md. */
+/** Roten: bara sammansättning. Varje område har sin egen modul. */
 @Module({
-  controllers: [ExportController, AdminController],
-  providers: [
-    knexProvider,
-    { provide: CLOCK, useValue: fixedClock() },
-    { provide: SOURCE_WEIGHTS, useValue: loadSourceWeights() },
-    { provide: SOURCE_NAMES, useValue: loadSourceNames() },
-    { provide: USER_DIRECTORY, useValue: loadUserDirectory() },
-    { provide: LLM, useClass: StubProvider },
-    ContentScopeService,
-    ArticleAccessService,
-    DigestService,
-    QueryTestService,
-    EnrichService,
-    ProfileService,
-    ProfileMatchService,
-    PipelineService,
-    RunLogService,
-    PurgeService,
-    TriageService,
-    TrendService,
-    EntityImportService,
+  imports: [
+    AppConfigModule,
+    DatabaseModule,
+    LlmModule,
+    AccessModule,
+    RunsModule,
+    ProfilesModule,
+    PipelineModule,
+    ImportModule,
+    DigestModule,
+    AdminModule,
+    ExportModule,
   ],
 })
 export class AppModule {}

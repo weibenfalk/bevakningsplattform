@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { DigestService } from '../src/digest/digest.service';
 import { pipelineConfig } from '../src/config/pipeline.config';
 import { PipelineService } from '../src/pipeline/pipeline.service';
-import { RunLogService } from '../src/pipeline/run-log.service';
+import { RunLogService } from '../src/runs/run-log.service';
 import { RawItem } from '../src/types';
 import { closeTestingApp, createTestingApp, testKnex } from './helpers';
 

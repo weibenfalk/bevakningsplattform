@@ -171,6 +171,14 @@ Varje post har datum, beslut, alternativ, varför och bevis (testfil). Det som k
 - **Varför:** Ett databasavbrott såg ut som att alla ägare saknades, och ett resultat fick visas under fel användares namn. Uppgiften säger att koden hanteras utan git-historik.
 - **Bevis:** `profile-matching.spec.ts`, `access.spec.ts`
 
+## 2026-10-13: AppModule delad i en modul per område
+
+- **Läge:** Allt låg i en enda `AppModule` (kodskuld i överlämningen). Nests konvention är en modul per område med tydliga exporter.
+- **Alternativ:** (a) Behålla en modul och dokumentera. (b) Dela upp och flytta även `purge` och `profile-match` ut ur `pipeline/`. (c) Dela upp men låta dem ligga kvar.
+- **Beslut:** (c). Moduler: `AppConfigModule` och `DatabaseModule` (globala), `LlmModule`, `AccessModule`, `RunsModule`, `ProfilesModule`, `PipelineModule`, `ImportModule`, `DigestModule`, `AdminModule`. `RunLogService` flyttades till `src/runs/` eftersom både profiler och pipeline använder den (annars hade modulerna fått en cirkel). `ExportController` och `csv.ts` flyttades från `admin/` till `src/export/` med egen `ExportModule`, eftersom exporten är för inloggade användare och inte admin. Ingen logik ändrad.
+- **Varför (b) valdes bort:** Arkitekturtestet kräver att skrivundantagen ligger under `src/pipeline/`. Att flytta filerna hade krävt en försvagad assertion i säkerhetstestet. Rensning och profilmatchning är dessutom pipelinesteg.
+- **Verifiering:** `npm run typecheck`, `npm test` (608 gröna, oförändrat antal) och `npm run demo`.
+
 ## AI-logg
 
 - **2026-10-09, AI hjälpte (`otherSources`-läckan):** AI:n läste utskicksmodulen och hittade att `otherSources` frågade `articles` direkt, förbi åtkomstmodulen. Namn och länkar till källor från artiklar utanför omfånget, flaggade för granskning och i nekade kategorier, kunde alltså nå fel mottagare. Arkitekturtestet missade det eftersom det bara söker efter `from articles`. AI:n skrev först tre röda tester och sedan `sourcesByCluster`, som delar omfångsregler med resten av åtkomstmodulen. Jag granskade lösningen och valde den framför att låta utskicket filtrera själv. Läckan hade inte upptäckts av de ärvda testerna.

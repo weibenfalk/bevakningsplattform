@@ -20,8 +20,8 @@ import { EnrichService } from '../src/pipeline/enrich.service';
 import { relevance } from '../src/pipeline/score';
 import { loadSourceWeights } from '../src/config/sources';
 import { PipelineService } from '../src/pipeline/pipeline.service';
-import { RunLogService } from '../src/pipeline/run-log.service';
-import type { PipelineRun } from '../src/pipeline/run-log.service';
+import { RunLogService } from '../src/runs/run-log.service';
+import type { PipelineRun } from '../src/runs/run-log.service';
 import { RawItem } from '../src/types';
 
 const brokenAi = process.argv.includes('--trasig-ai');

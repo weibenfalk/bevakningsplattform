@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { INestApplicationContext } from '@nestjs/common';
 import { globSync } from 'glob';
 import * as ts from 'typescript';
-import { ExportController } from '../src/admin/export.controller';
+import { ExportController } from '../src/export/export.controller';
 import { DigestService } from '../src/digest/digest.service';
 import { renderDigest } from '../src/digest/render';
 import { closeTestingApp, createTestingApp, seedArticles } from './helpers';

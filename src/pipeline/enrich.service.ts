@@ -15,7 +15,7 @@ import { contentHash, SkippedItem, Update, splitFresh } from './dedupe';
 import { isCorrection } from './correction';
 import { prepareItem } from './ingest';
 import { normalizeUrl } from './normalize-url';
-import { RunLogService } from './run-log.service';
+import { RunLogService } from '../runs/run-log.service';
 import { TrendService } from './trend.service';
 import { TriageService } from './triage.service';
 

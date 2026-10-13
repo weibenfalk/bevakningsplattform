@@ -1,7 +1,7 @@
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { INestApplicationContext } from '@nestjs/common';
-import { toCsv } from '../src/admin/csv';
-import { ExportController } from '../src/admin/export.controller';
+import { toCsv } from '../src/export/csv';
+import { ExportController } from '../src/export/export.controller';
 import { AuthGuard } from '../src/auth/auth.guard';
 import { closeTestingApp, createTestingApp, seedArticles } from './helpers';
 

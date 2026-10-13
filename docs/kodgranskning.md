@@ -104,7 +104,7 @@ Demon visar också att **r11 (koncernens möjliga börsnotering) når både Kall
 |---|---|---|---|
 | `access/article-access.service.ts` | K | `orWhere` för akuta förbigår omfånget. Eftersom AND binder hårdare än OR gäller nekade entiteter och sökfiltret bara akutgrenen (fel 1, 2). `deny_categories` används aldrig. `select('*')` lämnar ut `full_text` (fel 3). `orderByRaw(opts.sort)` ger SQL-injektion. | Skriv om |
 | `access/content-scope.service.ts` | H | Saknade tillåtna listor, nekade källor och högsta brådska enligt specifikationen (rättat, fel 48). | Bygg ut |
-| `admin/export.controller.ts` | K | Vem som helst kan ange `?userId=` och exportera en annan användares innehåll. `sort` skickas vidare till SQL. Inget skydd mot CSV-formler. | Skriv om |
+| `export/export.controller.ts` | K | Vem som helst kan ange `?userId=` och exportera en annan användares innehåll. `sort` skickas vidare till SQL. Inget skydd mot CSV-formler. | Skriv om |
 | `digest/digest.service.ts` | K | `otherSources` läser `articles` direkt förbi åtkomstmodulen. `...a` sprider hela raden. Tröskeln använder `>` i stället för `>=`. En databasfråga per artikel (N+1). Ingen hantering av uppföljning eller tunna utgåvor. | Skriv om |
 | `digest/render.ts` | K | `marked.parseInline(summary)` ger HTML-injektion i mejlet (fel 6). `javascript:`-länkar släpps igenom (fel 7). Saknar plaintext, dark mode och List-Unsubscribe. | Behåll `escapeHtml`, skriv om resten |
 | `pipeline/enrich.service.ts` | K | Modellen bestämmer arbetsyta, vilket öppnar för injektion (se r19). Faller tillbaka på originaltexten. `onConflict('raw_id').ignore()` gör att uppdateringar (d02) ignoreras och att det andra r09 försvinner tyst. Räknar aldrig ut `relevance`. Ingen loggning av körningar. | Skriv om |

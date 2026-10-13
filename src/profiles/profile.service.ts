@@ -8,7 +8,7 @@ import { matches, nodeText, notNodes, relaxNot } from '../query/evaluator';
 import { Field, parse } from '../query/parser';
 import { loadEntityNames, toQueryArticle } from './query-article';
 import { QuerySyntaxError } from '../query/tokenizer';
-import { RunLogService } from '../pipeline/run-log.service';
+import { RunLogService } from '../runs/run-log.service';
 
 /** Filen profilerna läses in från, om inget annat anges. */
 export const DEFAULT_PROFILES_FILE = 'data/profiles.json';

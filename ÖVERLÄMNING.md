@@ -59,15 +59,22 @@ råposter → inläsning → dubblettkontroll → triage → berikning → poän
 | Var | Vad |
 |---|---|
 | `src/access/` | Den enda vägen till innehållstabellerna. Lägger på användarens omfång. Arkitekturtestet fäller bygget om annan kod läser dem direkt. |
-| `src/pipeline/` | Stegen i kedjan, samlade i `pipeline.service.ts`. Varje steg loggar sin körning i `pipeline_runs`. |
+| `src/pipeline/` | Stegen i kedjan, samlade i `pipeline.service.ts`, samt rensningen (`purge.service.ts`) och profilmatchningen. Varje steg loggar sin körning i `pipeline_runs`. |
+| `src/runs/` | `RunLogService`: loggen över körningar. Ligger för sig eftersom både profiler och pipeline använder den. |
+| `src/profiles/` | Profilerna (inläsning, versioner, status) och översättningen av en artikel till frågespråkets fält. |
 | `src/query/` | Frågespråket: tokenizer, parser och utvärdering, utan reguljära uttryck. |
 | `src/llm/` | `LlmProvider`-gränssnittet och stubben. All AI går genom gränssnittet. |
 | `src/digest/` | Urval och rendering av mejlet. Sparar vad som skickats i `editions`, `deliveries` och `delivery_items`. |
-| `src/admin/`, `frontend/` | Export och det läs-bara adminverktyget. Gränssnittet har eget `package.json`. |
-| `src/config/` | Tröskel, klocka, källornas vikter och användarnamn. |
+| `src/admin/`, `frontend/` | Det läs-bara adminverktyget. Gränssnittet har eget `package.json`. |
+| `src/export/` | CSV-exporten av artiklar (`GET /export/articles.csv`), för inloggade användare. |
+| `src/config/`, `src/db/` | Tröskel, klocka, källornas vikter och användarnamn, samt databasanslutningen. Båda är globala moduler. |
 | `data/` | Testdata, entitetsregister, källor, användare och profiler. |
 | `migrations/` | Hela datamodellen, inklusive behörighet, i en migration (krav 2). |
 | `test/` | Testerna. `architecture-scan.ts` är detektorn bakom arkitekturtestet. |
+
+**Moduler:** varje mapp ovan har en egen NestJS-modul (`*.module.ts`), och `src/app.module.ts` sätter bara ihop dem. En modul når bara det andra moduler exporterar. `AccessModule` exporterar åtkomsttjänsterna, och inget annat når innehållstabellerna. Beslutet och avvägningarna står i beslutsloggen (2026-10-13).
+
+**Controllers:** de finns bara där något exponeras över HTTP, alltså `AdminController` (`src/admin/`) och `ExportController` (`src/export/`). Övriga områden körs av skript (`npm run demo`, `npm run purge`) och har ingen controller. Att veta: pipelinen kan inte startas via API, och vanliga användare kan inte hantera sina profiler över HTTP. Det är medvetet bortvalt tills riktig inloggning finns.
 
 **Ordlista:**
 - **Stubben:** en falsk AI (`src/llm/stub.provider.ts`). Den sätter arbetsyta och påverkan efter nyckelord.
@@ -146,7 +153,7 @@ Ingen av dessa läcker data. De gör koden svårare att ändra, eller är kända
 
 | Område | Vad | Varför |
 |---|---|---|
-| Moduler och start | Dela `AppModule` per område (databas, referensdata, åtkomst, AI, pipeline, profiler, utskick, admin, auth). Flytta filläsning vid import till `useFactory`, ge en gemensam `dataDir()`, stäng poolen i `OnApplicationShutdown` och slå på `enableShutdownHooks()`. Vid riktig inloggning: global guard med `@Public()` och `@CurrentUser()`. | Sökvägar beror på arbetskatalogen, och demon, `purge` och testerna har egna `destroy()`. |
+| Moduler och start | `AppModule` är delad per område (se beslutsloggen 2026-10-13). Kvar: flytta filläsning vid import till `useFactory`, ge en gemensam `dataDir()`, stäng poolen i `OnApplicationShutdown` och slå på `enableShutdownHooks()`. Vid riktig inloggning: global guard med `@Public()` och `@CurrentUser()`. | Sökvägar beror på arbetskatalogen, och demon, `purge` och testerna har egna `destroy()`. |
 | Validering och typer | zod för `RawItem` (en trasig post ska bli `invalid_item`, inte stoppa steget), `sources.json`, `users.json`, `profiles.json` och DTO på varje endpoint. Typa Knex och ta bort de sju `as unknown as`. `entities.id` är heltal men `articles.entity_ids` är text. | Indata och databas litas på utan kontroll. |
 | Utskick och export | `DigestService.send` ska använda `CLOCK` (i dag `new Date()`) och vara atomisk. Entitetsimporten i en transaktion och `StreamableFile` med `Content-Disposition` i exporten. Tröskeln 55 och gränsen 18 är gissade, och ett tomt utskick skapar ingen leverans. | Klockan är fast i testerna, och fel mitt i lämnar halva resultat. |
 | Index och prestanda | Ny migration med GIN på `search_vector`, `spaces`, `entity_ids`, `categories` och B-träd på `published_at` och `relevance`. Släpp `entity_matches`. Utvärderaren delar upp texten en gång per artikel, och profilfrågan tolkas en gång per körning. | Prestandakraven är inte mätta (100 profiler per artikel under 200 ms). |
@@ -167,7 +174,7 @@ Ingen av dessa läcker data. De gör koden svårare att ändra, eller är kända
 | Källornas vikt | `data/sources.json` | Ändra `weight`. Under 1,0 kan källan inte skapa en trend (`trend.service.ts`). |
 | En ny profil | `data/profiles.json` | Lägg till `id`, `user` och `query`. Pröva frågan med `npm run query -- '<fråga>'`. En trasig fråga hoppas över med ett felmeddelande. |
 | En ny användare | `data/users.json` | Lägg till `id`, `name`, `role` och `scopes`. Demon skriver in `scopes` i `content_scopes`. I produktion sätts de direkt i den tabellen. Admin styrs av `ADMIN_USER_IDS`. |
-| Klockan | `src/config/clock.ts` | Sätt `PIPELINE_NOW` (till exempel `2026-10-03T07:00:00+02:00`). I produktion byts den mot systemklockan genom att raden `{ provide: CLOCK, useValue: fixedClock() }` i `src/app.module.ts` byts mot `{ provide: CLOCK, useValue: { now: () => new Date() } }`. |
+| Klockan | `src/config/clock.ts` | Sätt `PIPELINE_NOW` (till exempel `2026-10-03T07:00:00+02:00`). I produktion byts den mot systemklockan genom att raden `{ provide: CLOCK, useValue: fixedClock() }` i `src/config/app-config.module.ts` byts mot `{ provide: CLOCK, useValue: { now: () => new Date() } }`. |
 
 ## Bra att veta
 

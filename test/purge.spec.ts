@@ -3,7 +3,7 @@ import { INestApplicationContext } from '@nestjs/common';
 import { Knex } from 'knex';
 import { CLOCK, Clock } from '../src/config/clock';
 import { PurgeService } from '../src/pipeline/purge.service';
-import { RunLogService } from '../src/pipeline/run-log.service';
+import { RunLogService } from '../src/runs/run-log.service';
 import { PipelineService } from '../src/pipeline/pipeline.service';
 import { RawItem } from '../src/types';
 import { closeTestingApp, createTestingApp, seedArticles, testKnex } from './helpers';

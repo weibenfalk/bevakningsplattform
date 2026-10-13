@@ -24,7 +24,7 @@ Stoppa och töm databasen med `npm run db:down`.
 
 ## Starta servern
 
-`npm start` startar `AppModule` (`src/main.ts`).
+`npm start` startar `AppModule` (`src/main.ts`), som sätter ihop en modul per område (`*.module.ts` i varje mapp under `src/`). Controllers finns bara i `src/admin/` (adminverktyget) och `src/export/` (CSV-exporten). Resten körs av skripten.
 
 | Inställning | Standard | Vad |
 |---|---|---|
@@ -180,7 +180,7 @@ Hur mapparna hänger ihop och var du ändrar tröskel, profiler, användare och 
 
 Startkoden saknade `package.json`, migrationer, moduluppsättning, autentisering, CSV-hjälpare och testhjälpare. Dessa är
 återskapade eller ersatta: `src/app.module.ts`, `src/auth/auth.guard.ts` (en platshållare, se varningen ovan),
-`src/admin/csv.ts` och `test/helpers.ts`.
+`src/export/csv.ts` och `test/helpers.ts`.
 
 ## Tidsantaganden
 
