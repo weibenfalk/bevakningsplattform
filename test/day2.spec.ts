@@ -1,7 +1,7 @@
 import { INestApplicationContext } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { DigestService } from '../src/digest/digest.service';
-import { pipelineConfig } from '../src/config/pipeline.config';
+import { pipelineConfig } from '../src/config/configuration';
 import { PipelineService } from '../src/pipeline/pipeline.service';
 import { RunLogService } from '../src/runs/run-log.service';
 import { RawItem } from '../src/types';

@@ -23,6 +23,7 @@ describe('Appen startar och exporten fungerar över HTTP', () => {
   const OLD_ADMINS = process.env.ADMIN_USER_IDS;
 
   beforeAll(async () => {
+    process.env.ADMIN_USER_IDS = 'u-mikael'; // konfigurationen läses när appen skapas
     await createTestingApp(); // tömmer och fyller databasen
     await seedArticles([
       { raw_id: 't1', spaces: ['takvard'], urgency: 'info', title: 'Takvårdsnyhet' },
@@ -39,7 +40,6 @@ describe('Appen startar och exporten fungerar över HTTP', () => {
     await closeTestingApp();
     if (OLD_ADMINS === undefined) delete process.env.ADMIN_USER_IDS; else process.env.ADMIN_USER_IDS = OLD_ADMINS;
   });
-  beforeEach(() => { delete process.env.ADMIN_USER_IDS; });
 
   const get = (path: string, userId?: string) =>
     fetch(`${base}${path}`, { headers: userId ? { 'x-user-id': userId } : {} });
@@ -74,7 +74,6 @@ describe('Appen startar och exporten fungerar över HTTP', () => {
   });
 
   it('låter en admin (ADMIN_USER_IDS) exportera en annan användares innehåll', async () => {
-    process.env.ADMIN_USER_IDS = 'u-mikael';
     const body = await (await get('/export/articles.csv?userId=u-kalle', 'u-mikael')).text();
     expect(body).toContain('Takvårdsnyhet');
     expect(body).not.toContain('Fönsternyhet');

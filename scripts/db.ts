@@ -1,5 +1,5 @@
 import knex, { Knex } from 'knex';
-import { LOCAL_DATABASE_URL } from '../src/config/database';
+import { LOCAL_DATABASE_URL } from '../src/config/configuration';
 
 /** Samma databas som docker-compose.yml startar, om inget annat anges. */
 process.env.DATABASE_URL ??= LOCAL_DATABASE_URL;

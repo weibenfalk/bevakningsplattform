@@ -32,6 +32,9 @@ Stoppa och töm databasen med `npm run db:down`.
 | `HOST` | `127.0.0.1` | Adress. Servern är bara nåbar från den egna datorn, se varningen nedan. |
 | `DATABASE_URL` | den lokala Docker-databasen | Krävs i produktion (`NODE_ENV=production`). |
 | `ADMIN_USER_IDS` | tom (ingen är admin) | Kommaseparerade användar-id som är admin. |
+| `PIPELINE_NOW` | `2026-10-01T07:00:00+02:00` | Pipelinens fasta klocka. Ett ogiltigt datum stoppar starten med ett tydligt fel. |
+
+Alla inställningar i `src/` läses och kontrolleras vid start på ett ställe, `src/config/configuration.ts`. Skripten i `scripts/` läser `DATABASE_URL` själva.
 
 > **Varning: `x-user-id` är en platshållare, inte inloggning.** Servern litar på headern `x-user-id` och kontrollerar
 > inte att anroparen är den hen utger sig för att vara. Vem som helst som når servern kan skicka en annan användares id

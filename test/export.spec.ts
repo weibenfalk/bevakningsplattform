@@ -1,5 +1,7 @@
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { INestApplicationContext } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { loadConfiguration } from '../src/config/configuration';
 import { toCsv } from '../src/export/csv';
 import { ExportController } from '../src/export/export.controller';
 import { AuthGuard } from '../src/auth/auth.guard';
@@ -11,28 +13,30 @@ const contextFor = (headers: Record<string, string>) => {
 };
 
 describe('AuthGuard: roll', () => {
+  // Konfigurationen läses när vakten skapas, så miljön måste vara satt först.
+  const guard = () => new AuthGuard(new ConfigService(loadConfiguration()));
   const OLD = process.env.ADMIN_USER_IDS;
   afterEach(() => { if (OLD === undefined) delete process.env.ADMIN_USER_IDS; else process.env.ADMIN_USER_IDS = OLD; });
 
   it('avvisar anrop utan användare', () => {
-    expect(() => new AuthGuard().canActivate(contextFor({}).ctx)).toThrow(UnauthorizedException);
+    expect(() => guard().canActivate(contextFor({}).ctx)).toThrow(UnauthorizedException);
   });
 
   it('ingen är admin om inget anges', () => {
     delete process.env.ADMIN_USER_IDS;
     const { req, ctx } = contextFor({ 'x-user-id': 'u-mikael' });
-    new AuthGuard().canActivate(ctx);
+    guard().canActivate(ctx);
     expect(req.user).toEqual({ id: 'u-mikael', isAdmin: false });
   });
 
   it('admin är bara de som står i ADMIN_USER_IDS, och en roll i headern räknas inte', () => {
     process.env.ADMIN_USER_IDS = 'u-admin, u-annan';
     const admin = contextFor({ 'x-user-id': 'u-admin' });
-    new AuthGuard().canActivate(admin.ctx);
+    guard().canActivate(admin.ctx);
     expect(admin.req.user).toEqual({ id: 'u-admin', isAdmin: true });
 
     const fake = contextFor({ 'x-user-id': 'u-anna', 'x-user-role': 'admin', 'x-admin': 'true' });
-    new AuthGuard().canActivate(fake.ctx);
+    guard().canActivate(fake.ctx);
     expect(fake.req.user).toEqual({ id: 'u-anna', isAdmin: false });
   });
 });

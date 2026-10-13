@@ -13,3 +13,7 @@
 # Frontend - enkelt admin gränssnitt
 
 2 h
+
+# Sista justeringar och uppdatering till NestJS standarder
+
+1 h

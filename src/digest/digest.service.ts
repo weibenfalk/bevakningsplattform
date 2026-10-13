@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ArticleAccessService, ArticleRow } from '../access/article-access.service';
-import { pipelineConfig } from '../config/pipeline.config';
+import { pipelineConfig } from '../config/configuration';
 import { SOURCE_NAMES, sourceLabel } from '../config/sources';
 import { renderDigest, DigestArticle } from './render';
 

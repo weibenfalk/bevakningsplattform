@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AccessModule } from './access/access.module';
 import { AdminModule } from './admin/admin.module';
 import { AppConfigModule } from './config/app-config.module';
+import { loadConfiguration, validateEnv } from './config/configuration';
 import { DatabaseModule } from './db/database.module';
 import { DigestModule } from './digest/digest.module';
 import { ExportModule } from './export/export.module';
@@ -14,6 +16,7 @@ import { RunsModule } from './runs/runs.module';
 /** Roten: bara sammansättning. Varje område har sin egen modul. */
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true, load: [loadConfiguration], validate: validateEnv }),
     AppConfigModule,
     DatabaseModule,
     LlmModule,

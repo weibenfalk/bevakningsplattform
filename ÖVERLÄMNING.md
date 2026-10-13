@@ -22,7 +22,7 @@ npm test               # hela sviten, mot en egen databas (bevakning_test)
 ```
 
 **Så ser det ut när det fungerar:**
-- `npm test` visar 608 godkända tester i 39 sviter.
+- `npm test` visar 629 godkända tester i 41 sviter.
 - Demon importerar 7 entiteter och sparar 21 av 23 råposter (r03 och den andra r09 hoppas över). Profilerna `pf-tak-pris` och `pf-puts` hoppas över med ett felmeddelande, och det är meningen.
 - Utskicket dag 1 innehåller 14 artiklar för Mikael, 10 för Kalle och 4 för Anna (r06, r07, r09, r20). Anna får ingen konkurs.
 - Demon varnar för `r08` hos Anna och Mikael ("brus"). Det är stubbens poäng, se Risker.
@@ -153,7 +153,8 @@ Ingen av dessa läcker data. De gör koden svårare att ändra, eller är kända
 
 | Område | Vad | Varför |
 |---|---|---|
-| Moduler och start | `AppModule` är delad per område (se beslutsloggen 2026-10-13). Kvar: flytta filläsning vid import till `useFactory`, ge en gemensam `dataDir()`, stäng poolen i `OnApplicationShutdown` och slå på `enableShutdownHooks()`. Vid riktig inloggning: global guard med `@Public()` och `@CurrentUser()`. | Sökvägar beror på arbetskatalogen, och demon, `purge` och testerna har egna `destroy()`. |
+| Konfiguration | `fixedClock()` läser inte längre `PIPELINE_NOW` själv, bara DI-vägen i `app-config.module.ts` gör det. `PIPELINE_NOW` utan tidszon tolkas i serverns tidszon och inte som Europe/Stockholm (`validateEnv` släpper igenom det). `validateEnv` körs när `app.module.ts` importeras och inte vid start. Adminlistan läses när appen skapas, så `AuthGuard` ser inte en ändring av `ADMIN_USER_IDS` efter start. `main.ts` re-exporterar `DEFAULT_HOST`, `DEFAULT_PORT` och `parsePort` för bakåtkompatibilitet. | Små risker som kom fram i kodgranskningen (beslutsloggen 2026-10-13). Åtgärdas med riktig konfiguration per miljö. |
+| Moduler och start | `AppModule` är delad per område (se beslutsloggen 2026-10-13). Alla inställningar läses i `src/config/configuration.ts` och nås via `ConfigService` (se beslutsloggen 2026-10-13). Kvar: flytta filläsning vid import till `useFactory`, ge en gemensam `dataDir()`, stäng poolen i `OnApplicationShutdown` och slå på `enableShutdownHooks()`. Vid riktig inloggning: global guard med `@Public()` och `@CurrentUser()`. | Sökvägar beror på arbetskatalogen, och demon, `purge` och testerna har egna `destroy()`. |
 | Validering och typer | zod för `RawItem` (en trasig post ska bli `invalid_item`, inte stoppa steget), `sources.json`, `users.json`, `profiles.json` och DTO på varje endpoint. Typa Knex och ta bort de sju `as unknown as`. `entities.id` är heltal men `articles.entity_ids` är text. | Indata och databas litas på utan kontroll. |
 | Utskick och export | `DigestService.send` ska använda `CLOCK` (i dag `new Date()`) och vara atomisk. Entitetsimporten i en transaktion och `StreamableFile` med `Content-Disposition` i exporten. Tröskeln 55 och gränsen 18 är gissade, och ett tomt utskick skapar ingen leverans. | Klockan är fast i testerna, och fel mitt i lämnar halva resultat. |
 | Index och prestanda | Ny migration med GIN på `search_vector`, `spaces`, `entity_ids`, `categories` och B-träd på `published_at` och `relevance`. Släpp `entity_matches`. Utvärderaren delar upp texten en gång per artikel, och profilfrågan tolkas en gång per körning. | Prestandakraven är inte mätta (100 profiler per artikel under 200 ms). |
@@ -169,12 +170,13 @@ Ingen av dessa läcker data. De gör koden svårare att ändra, eller är kända
 
 | Vill du ändra | Fil | Gör så här |
 |---|---|---|
-| Tröskeln för utskick | `src/config/pipeline.config.ts` | Ändra `digest.threshold` (55) eller `maxItems` (18). Triagetröskeln är `TRIAGE_MIN_SCORE` (40), och samma-story-gränsen `DEDUPE_THRESHOLD` (0,92). Båda går att sätta som miljövariabel. |
+| Alla inställningar (port, databas, admin, klocka, trösklar) | `src/config/configuration.ts` | Den enda filen i `src/` som läser miljövariabler (skripten i `scripts/` läser `DATABASE_URL` själva, se `scripts/db.ts`). Lägg nya inställningar i `loadConfiguration` och läs dem med `ConfigService` (typad: `config.get('server.port', { infer: true })`). Konfigurationen läses när appen skapas, så en miljövariabel måste vara satt före start. `validateEnv` (i samma fil) stoppar starten vid ogiltigt `PIPELINE_NOW` och saknad `DATABASE_URL` i produktion. |
+| Tröskeln för utskick | `src/config/configuration.ts` (`loadPipelineConfig`) | Ändra `digest.threshold` (55) eller `maxItems` (18). Triagetröskeln är `TRIAGE_MIN_SCORE` (40), och samma-story-gränsen `DEDUPE_THRESHOLD` (0,92). Båda går att sätta som miljövariabel. |
 | Kategorilistan | `src/llm/enrichment.schema.ts` | Ändra `CATEGORIES`. Uppdatera också stubben och `deny_categories` i `content_scopes`. |
 | Källornas vikt | `data/sources.json` | Ändra `weight`. Under 1,0 kan källan inte skapa en trend (`trend.service.ts`). |
 | En ny profil | `data/profiles.json` | Lägg till `id`, `user` och `query`. Pröva frågan med `npm run query -- '<fråga>'`. En trasig fråga hoppas över med ett felmeddelande. |
 | En ny användare | `data/users.json` | Lägg till `id`, `name`, `role` och `scopes`. Demon skriver in `scopes` i `content_scopes`. I produktion sätts de direkt i den tabellen. Admin styrs av `ADMIN_USER_IDS`. |
-| Klockan | `src/config/clock.ts` | Sätt `PIPELINE_NOW` (till exempel `2026-10-03T07:00:00+02:00`). I produktion byts den mot systemklockan genom att raden `{ provide: CLOCK, useValue: fixedClock() }` i `src/config/app-config.module.ts` byts mot `{ provide: CLOCK, useValue: { now: () => new Date() } }`. |
+| Klockan | `src/config/configuration.ts` (`pipelineNow`), `src/config/app-config.module.ts` | Sätt `PIPELINE_NOW` (till exempel `2026-10-03T07:00:00+02:00`). I produktion byts den mot systemklockan genom att posten för `CLOCK` i `src/config/app-config.module.ts` (den som börjar med `{ provide: CLOCK, inject: [ConfigService], useFactory: … fixedClock(…) }`) byts mot `{ provide: CLOCK, useValue: { now: () => new Date() } }`. Ta bort importerna av `ConfigService`, `AppConfigService` och `fixedClock` som då blir oanvända. |
 
 ## Bra att veta
 

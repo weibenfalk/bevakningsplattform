@@ -1,5 +1,5 @@
 import { INestApplicationContext } from '@nestjs/common';
-import { pipelineConfig } from '../src/config/pipeline.config';
+import { pipelineConfig } from '../src/config/configuration';
 import { DigestService } from '../src/digest/digest.service';
 import { closeTestingApp, createTestingApp, seedArticles, testKnex } from './helpers';
 

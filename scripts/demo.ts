@@ -12,7 +12,7 @@ import { NestFactory } from '@nestjs/core';
 import { assertDemoDatabase, db } from './db';
 import { AppModule } from '../src/app.module';
 import { ArticleAccessService } from '../src/access/article-access.service';
-import { pipelineConfig } from '../src/config/pipeline.config';
+import { pipelineConfig } from '../src/config/configuration';
 import { DigestService } from '../src/digest/digest.service';
 import { EntityImportService } from '../src/import/entity-import.service';
 import { LLM, LlmProvider } from '../src/llm/llm.provider';

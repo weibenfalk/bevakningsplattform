@@ -14,6 +14,7 @@ describe('Admin: frågetestare (POST /admin/query-test)', () => {
   const OLD_ADMINS = process.env.ADMIN_USER_IDS;
 
   beforeAll(async () => {
+    process.env.ADMIN_USER_IDS = 'u-mikael'; // konfigurationen läses när appen skapas
     await createTestingApp();
     await seedArticles([
       { raw_id: 't1', spaces: ['takvard'], urgency: 'akut', relevance: 90, title: 'Rikstak köper lokal firma', summary: 'Affären gäller takvård', full_text: 'HEMLIG-FULLTEXT pumpatävling' },
@@ -36,7 +37,6 @@ describe('Admin: frågetestare (POST /admin/query-test)', () => {
     await closeTestingApp();
     if (OLD_ADMINS === undefined) delete process.env.ADMIN_USER_IDS; else process.env.ADMIN_USER_IDS = OLD_ADMINS;
   });
-  beforeEach(() => { process.env.ADMIN_USER_IDS = 'u-mikael'; });
   // Ett test som ändrar Annas omfång lämnar det som det var
   afterEach(() => testKnex()('content_scopes').where({ user_id: 'u-anna' }).update({
     allow_categories: [], allow_sources: [], allow_entities: [], deny_categories: [], deny_sources: [], deny_entities: [], max_urgency: null,
@@ -167,10 +167,10 @@ describe('Admin: frågetestaren ger samma träffar som profilmatchningen i pipel
   const OLD_ADMINS = process.env.ADMIN_USER_IDS;
 
   beforeAll(async () => {
+    process.env.ADMIN_USER_IDS = 'u-mikael'; // konfigurationen läses när appen skapas
     const app = await createTestingApp();
     const dag1: RawItem[] = ['raw_items.json', 'raw_items_extra.json'].flatMap((f) => JSON.parse(readFileSync(`data/${f}`, 'utf8')));
     await app.get(PipelineService).run(dag1); // läser data/profiles.json och sparar träffarna i profile_matches
-    process.env.ADMIN_USER_IDS = 'u-mikael';
     server = await bootstrap({ port: 0, logger: TEST_LOGGER });
     base = `http://127.0.0.1:${(server.getHttpServer().address() as AddressInfo).port}`;
   });

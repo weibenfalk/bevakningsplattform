@@ -1,4 +1,4 @@
-import { pipelineConfig } from '../config/pipeline.config';
+import { pipelineConfig } from '../config/configuration';
 
 /**
  * Cosinuslikhet mellan två vektorer: skalärprodukten delad med produkten av längderna. Resultatet ligger mellan -1 och 1.

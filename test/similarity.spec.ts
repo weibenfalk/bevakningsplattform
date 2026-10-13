@@ -1,4 +1,4 @@
-import { pipelineConfig } from '../src/config/pipeline.config';
+import { pipelineConfig } from '../src/config/configuration';
 import { StubProvider } from '../src/llm/stub.provider';
 import { isSameStory, similarity } from '../src/pipeline/similarity';
 

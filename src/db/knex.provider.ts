@@ -1,14 +1,16 @@
+import { ConfigService } from '@nestjs/config';
 import knex, { Knex } from 'knex';
-import { resolveDatabaseUrl } from '../config/database';
+import { AppConfigService } from '../config/configuration';
 
 export const KNEX = Symbol('KNEX');
 
 export const knexProvider = {
   provide: KNEX,
-  useFactory: (): Knex =>
+  inject: [ConfigService],
+  useFactory: (config: AppConfigService): Knex =>
     knex({
       client: 'pg',
-      connection: resolveDatabaseUrl(),
+      connection: config.get('databaseUrl', { infer: true }),
       pool: { min: 0, max: 10 },
     }),
 };

@@ -1,6 +1,6 @@
 import { INestApplicationContext } from '@nestjs/common';
 import { ArticleAccessService } from '../src/access/article-access.service';
-import { pipelineConfig } from '../src/config/pipeline.config';
+import { pipelineConfig } from '../src/config/configuration';
 import { DigestService } from '../src/digest/digest.service';
 import { renderDigest } from '../src/digest/render';
 import { closeTestingApp, createTestingApp, seedArticles, testKnex } from './helpers';

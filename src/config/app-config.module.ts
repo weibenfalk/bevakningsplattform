@@ -1,4 +1,6 @@
 import { Global, Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AppConfigService } from './configuration';
 import { CLOCK, fixedClock } from './clock';
 import { SOURCE_NAMES, SOURCE_WEIGHTS, loadSourceNames, loadSourceWeights } from './sources';
 import { USER_DIRECTORY, loadUserDirectory } from './users';
@@ -7,7 +9,7 @@ import { USER_DIRECTORY, loadUserDirectory } from './users';
 @Global()
 @Module({
   providers: [
-    { provide: CLOCK, useValue: fixedClock() },
+    { provide: CLOCK, inject: [ConfigService], useFactory: (config: AppConfigService) => fixedClock(config.get('pipelineNow', { infer: true })) },
     { provide: SOURCE_WEIGHTS, useValue: loadSourceWeights() },
     { provide: SOURCE_NAMES, useValue: loadSourceNames() },
     { provide: USER_DIRECTORY, useValue: loadUserDirectory() },

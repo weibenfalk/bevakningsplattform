@@ -179,6 +179,31 @@ Varje post har datum, beslut, alternativ, varför och bevis (testfil). Det som k
 - **Varför (b) valdes bort:** Arkitekturtestet kräver att skrivundantagen ligger under `src/pipeline/`. Att flytta filerna hade krävt en försvagad assertion i säkerhetstestet. Rensning och profilmatchning är dessutom pipelinesteg.
 - **Verifiering:** `npm run typecheck`, `npm test` (608 gröna, oförändrat antal) och `npm run demo`.
 
+### Tillägg samma dag: konfigurationen samlad på ett ställe
+
+- **Läge:** Miljövariablerna lästes på flera ställen (`main.ts`, `auth.guard.ts`, `clock.ts`, `pipeline.config.ts`, `database.ts`), utan samlad kontroll vid start.
+- **Alternativ:** (a) Låta det vara och dokumentera. (b) En fil, `src/config/configuration.ts`, med `ConfigModule.forRoot({ load, validate })` och NestJS standard `ConfigService`. (c) Som (b) men med en egen klass (`AppSettings`) som läser om miljön vid varje anrop.
+- **Beslut:** (b). Först valde jag (c), eftersom `ConfigService` cachar konfigurationen när appen skapas och sex testställen sätter `ADMIN_USER_IDS` efteråt. Det avvek från standard, så testerna ändrades i stället: de sätter nu miljövariabeln före `createTestingApp()` och `bootstrap()` (`app.spec`, `admin.spec`, `admin-query.spec` i två block, `admin-profiles.spec` var redan rätt), och `export.spec` och `database-config.spec` skapar sin `ConfigService` efter att miljön är satt. Ingen assertion ändrades. `AppSettings` är borttagen.
+- **Så fungerar det:** `loadConfiguration` returnerar ett typat objekt. `AuthGuard`, databasen, klockan och `main.ts` läser det via `ConfigService<AppConfiguration, true>`. `pipelineConfig` (för rena funktioner som inte injiceras, till exempel `similarity.ts`) bygger på `loadPipelineConfig` i samma fil. `validateEnv` körs vid start och stoppar vid ogiltigt `PIPELINE_NOW` (förut blev klockan tyst ett ogiltigt datum) eller saknad `DATABASE_URL` i produktion. Rött först: `test/configuration.spec.ts` och `test/env-validation.spec.ts`.
+- **Varför `pipelineConfig` inte är injicerad:** den används som konstant av rena funktioner (`similarity.ts`) och av ett tiotal tester. Att göra den injicerad är en stor ändring för liten vinst. Ogiltiga `PORT`, `TRIAGE_MIN_SCORE` och `DEDUPE_THRESHOLD` ger fortfarande standardvärdet, som förut.
+- **Följd:** Konfigurationen läses när appen skapas, så en miljövariabel måste vara satt före start. Det gäller också testerna.
+- **Kvar utanför:** `resolveDatabaseUrl` har `process.env` som standardargument (anropas bara från `configuration.ts` och skripten). Datafilerna (`sources.ts`, `users.ts`) läser data och inte inställningar.
+- **Version:** `@nestjs/config` 4.0.4. Version 12 (senaste) är bara ES-modul och fungerade inte med CommonJS och ts-jest (23 sviter föll). Kontrollerat med `npm view` före installation.
+- **Verifiering:** 624 tester gröna, `npm run demo`, `npm run purge` och HTTP-prov (401, 403, 200, och 403 för Mikael utan `ADMIN_USER_IDS`). Ogiltigt `PIPELINE_NOW` och saknad `DATABASE_URL` i produktion stoppar starten.
+
+#### Rättningar efter kodgranskning (`/code-review`), samma dag
+
+Granskningen hittade nio saker. Jag kontrollerade fyra mot koden, och alla stämde. De är rättade, med rött test först:
+
+1. **`HOST=` (tom) öppnade servern mot alla gränssnitt.** `env.HOST ?? DEFAULT_HOST` släppte igenom en tom sträng, och Node binder en tom host till `::`. Autentiseringen är en platshållare som litar på headern, så det var det allvarligaste. Nu `env.HOST?.trim() || DEFAULT_HOST`. Test: `configuration.spec.ts` (tom och blank `HOST`).
+2. **Överlämningen pekade på en rad som inte fanns** (`{ provide: CLOCK, useValue: fixedClock() }`), eftersom jag själv hade bytt den mot en `useFactory`. Följer man instruktionen i produktion kan man behålla den fasta klockan. Det var mitt fel och granskningen fångade det. Raden beskriver nu den riktiga posten och vilka importer som blir oanvända.
+3. **`pipeline` i `loadConfiguration` var död kod** och en andra väg till samma värden. Fältet är borttaget. Trösklarna nås bara via `pipelineConfig`.
+4. **`pipelineConfig` lästes vid import**, före en eventuell `.env`. Den är nu lat: den läser miljön vid första användningen (och cachar då). Test: `pipeline-config.spec.ts` (värdet sätts efter importen).
+
+**Inte åtgärdat, noterat som kodskuld i `ÖVERLÄMNING.md`:** `fixedClock()` läser inte längre `PIPELINE_NOW` själv (bara DI-vägen gör det), ett `PIPELINE_NOW` utan tidszon tolkas i serverns tidszon och inte som Europe/Stockholm (var så före ändringen också), `validateEnv` körs vid import av `app.module.ts` och inte vid start, `AuthGuard` kräver `ConfigService` och adminlistan fryses vid start (priset för standardmönstret), och `main.ts` re-exporterar `DEFAULT_HOST`, `DEFAULT_PORT` och `parsePort` för bakåtkompatibilitet.
+
+**Verifiering:** 629 tester gröna, `npm run demo`, `npm run purge` och HTTP-prov med `HOST=` tom (binder 127.0.0.1).
+
 ## AI-logg
 
 - **2026-10-09, AI hjälpte (`otherSources`-läckan):** AI:n läste utskicksmodulen och hittade att `otherSources` frågade `articles` direkt, förbi åtkomstmodulen. Namn och länkar till källor från artiklar utanför omfånget, flaggade för granskning och i nekade kategorier, kunde alltså nå fel mottagare. Arkitekturtestet missade det eftersom det bara söker efter `from articles`. AI:n skrev först tre röda tester och sedan `sourcesByCluster`, som delar omfångsregler med resten av åtkomstmodulen. Jag granskade lösningen och valde den framför att låta utskicket filtrera själv. Läckan hade inte upptäckts av de ärvda testerna.

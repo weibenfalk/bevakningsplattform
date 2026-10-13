@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import { CLOCK, Clock } from '../config/clock';
-import { pipelineConfig } from '../config/pipeline.config';
+import { pipelineConfig } from '../config/configuration';
 import { KNEX } from '../db/knex.provider';
 import { RunLogService } from '../runs/run-log.service';
 

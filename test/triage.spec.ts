@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { pipelineConfig } from '../src/config/pipeline.config';
+import { pipelineConfig } from '../src/config/configuration';
 import { LlmProvider } from '../src/llm/llm.provider';
 import { TriageService } from '../src/pipeline/triage.service';
 import { RawItem } from '../src/types';

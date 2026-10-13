@@ -1,4 +1,5 @@
-import { LOCAL_DATABASE_URL, resolveDatabaseUrl } from '../src/config/database';
+import { ConfigService } from '@nestjs/config';
+import { LOCAL_DATABASE_URL, loadConfiguration, resolveDatabaseUrl } from '../src/config/configuration';
 import { knexProvider } from '../src/db/knex.provider';
 import { assertDemoDatabase } from '../scripts/db';
 
@@ -26,7 +27,7 @@ describe('knexProvider', () => {
     const old = process.env.DATABASE_URL;
     delete process.env.DATABASE_URL;
     try {
-      const knex = knexProvider.useFactory();
+      const knex = knexProvider.useFactory(new ConfigService(loadConfiguration()));
       // Knex tolkar strängen till ett objekt.
       expect((knex.client.config as { connection: unknown }).connection).toMatchObject({
         host: 'localhost', port: '5433', user: 'bevakning', database: 'bevakning',

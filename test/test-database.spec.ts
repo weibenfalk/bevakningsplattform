@@ -1,4 +1,4 @@
-import { LOCAL_DATABASE_URL } from '../src/config/database';
+import { LOCAL_DATABASE_URL } from '../src/config/configuration';
 import { adminDatabaseUrl, assertTestDatabase, TEST_DATABASE_URL, testDatabaseUrl } from './test-database';
 import { closeTestingApp, createTestingApp, testKnex } from './helpers';
 

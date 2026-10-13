@@ -13,6 +13,7 @@ describe('Admin: visa som en annan användare (läs-bara)', () => {
   const OLD_ADMINS = process.env.ADMIN_USER_IDS;
 
   beforeAll(async () => {
+    process.env.ADMIN_USER_IDS = 'u-mikael'; // konfigurationen läses när appen skapas
     await createTestingApp();
     await seedArticles([
       { raw_id: 't1', spaces: ['takvard'], urgency: 'akut', relevance: 90, title: 'Takvårdsnyhet', full_text: 'HEMLIG-FULLTEXT', categories: ['konkurrent'] },
@@ -36,7 +37,6 @@ describe('Admin: visa som en annan användare (läs-bara)', () => {
     await closeTestingApp();
     if (OLD_ADMINS === undefined) delete process.env.ADMIN_USER_IDS; else process.env.ADMIN_USER_IDS = OLD_ADMINS;
   });
-  beforeEach(() => { process.env.ADMIN_USER_IDS = 'u-mikael'; });
 
   const get = (path: string, userId?: string) => fetch(`${base}${path}`, { headers: userId ? { 'x-user-id': userId } : {} });
 

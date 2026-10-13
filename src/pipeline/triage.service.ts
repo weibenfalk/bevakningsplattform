@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { pipelineConfig } from '../config/pipeline.config';
+import { pipelineConfig } from '../config/configuration';
 import { extractJson } from '../llm/extract-json';
 import { LLM, LlmProvider } from '../llm/llm.provider';
 import { neutralize } from '../llm/prompt';
